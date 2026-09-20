@@ -5,7 +5,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
-use hashbrown::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use wasi::io::poll::Pollable as WasiPollable;
 
@@ -15,7 +15,7 @@ use crate::poller::{EventKey, Poller};
 
 pub(crate) fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
     const VTABLE: RawWakerVTable = {
-        unsafe fn clone(ptr: *const ()) -> RawWaker {
+        unsafe fn clone(ptr: *const ()) -> RawWaker { unsafe {
             let ptr = ptr as *const RefCell<bool>;
             Rc::increment_strong_count(ptr);
 
@@ -24,16 +24,16 @@ pub(crate) fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
             let state = state.clone();
 
             RawWaker::new(Rc::into_raw(state) as _, &VTABLE)
-        }
+        }}
 
-        unsafe fn wake(ptr: *const ()) {
+        unsafe fn wake(ptr: *const ()) { unsafe {
             let state = Rc::from_raw(ptr as *const RefCell<bool>);
             if let Ok(state) = state.try_borrow_mut().as_mut() {
                 **state = true;
             };
-        }
+        }}
 
-        unsafe fn wake_by_ref(ptr: *const ()) {
+        unsafe fn wake_by_ref(ptr: *const ()) { unsafe {
             let ptr = ptr as *const RefCell<bool>;
             Rc::increment_strong_count(ptr);
 
@@ -41,11 +41,11 @@ pub(crate) fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
             if let Ok(state) = state.try_borrow_mut().as_mut() {
                 **state = true;
             };
-        }
+        }}
 
-        unsafe fn drop(ptr: *const ()) {
+        unsafe fn drop(ptr: *const ()) { unsafe {
             let _ = Rc::from_raw(ptr as *const RefCell<bool>);
-        }
+        }}
 
         RawWakerVTable::new(clone, wake, wake_by_ref, drop)
     };
@@ -149,7 +149,7 @@ impl Reactor {
             let mut pending = vec![];
             while let Some((task_id, state, task)) = tasks.pop() {
                 let Some((state, mut task)) = ({
-                    let s = { *state.borrow() };
+                    let s = *state.borrow();
                     if s {
                         let state = state.clone();
                         *state.borrow_mut() = false;
@@ -210,6 +210,7 @@ impl Reactor {
         }
 
         for key in reactor.poller.block_until() {
+            trace!("wake key {key:?}");
             match reactor.wakers.get(&key) {
                 Some(waker) => waker.wake_by_ref(),
                 None => panic!("tried to wake the waker for non-existent `{key:?}`"),

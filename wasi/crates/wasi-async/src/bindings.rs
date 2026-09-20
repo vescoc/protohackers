@@ -2,7 +2,7 @@
 // Options used:
 
 #[cfg(target_arch = "wasm32")]
-#[link_section = "component-type:wit-bindgen:0.24.0:wasi-async:encoded world"]
+#[unsafe(link_section = "component-type:wit-bindgen:0.24.0:wasi-async:encoded world")]
 #[doc(hidden)]
 pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 170] = *b"\
 \0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07*\x01A\x02\x01A\0\x04\

@@ -129,7 +129,7 @@ where
     }
 }
 
-impl<'a, R, W> Client<'a, R, W, Chatting>
+impl<R, W> Client<'_, R, W, Chatting>
 where
     R: Stream<Item = Result<String, StreamError>> + Unpin + FusedStream,
     W: Sink<String, Error = StreamError> + Unpin,

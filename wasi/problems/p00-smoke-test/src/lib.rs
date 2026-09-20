@@ -4,7 +4,7 @@ use wasi::io::streams::StreamError;
 use wasi::sockets::network::{ErrorCode, IpSocketAddress};
 
 use thiserror::Error;
-use tracing::{info, instrument};
+use tracing::{info, debug, instrument};
 
 use wasi_async::io::AsyncWrite;
 use wasi_async::net::TcpStream;
@@ -27,8 +27,13 @@ pub async fn run(address: IpSocketAddress, mut stream: TcpStream) -> Result<(), 
 
     let (mut read, mut write) = stream.split();
     let r = async move {
-        while write.splice(&mut read, 1024).await? > 0 {
-            write.flush().await?
+        loop {
+            let bytes = write.splice(&mut read, 1024).await?;
+            if bytes == 0 {
+                break;
+            }
+            write.flush().await?;
+            debug!("read-write {bytes} bytes");
         }
         Ok(())
     }

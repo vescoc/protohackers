@@ -194,7 +194,7 @@ impl TcpStream {
         (read, write)
     }
 
-    pub fn split(&mut self) -> (ReadHalf, WriteHalf) {
+    pub fn split(&mut self) -> (ReadHalf<'_>, WriteHalf<'_>) {
         let this = self.0.as_mut().unwrap();
 
         let read = ReadHalf {
@@ -236,16 +236,16 @@ impl<'a> AsyncRead for ReadHalf<'a> {
     async fn read(&mut self, len: u64) -> Result<Vec<u8>, StreamError> {
         loop {
             let data = self.input_stream.read(len)?;
-            if !data.is_empty() {
+            if !data.is_empty() || len == 0 {
                 return Ok(data);
             }
 
             let subscription = self.input_stream.subscribe();
-            trace!("input stream subscription {subscription:?}");
+            trace!("input stream subscription {subscription:?} len {len}");
             self.reactor.wait_for(subscription).await;
 
             let data = self.input_stream.read(len)?;
-            if data.is_empty() && len == 0 {
+            if !data.is_empty() || len == 0 {
                 return Ok(data);
             }
         }
@@ -319,7 +319,7 @@ impl<'a> WriteHalf<'a> {
                 return Ok(len);
             }
             let subscription = read.input_stream.subscribe();
-            trace!("input stream subscription {subscription:?}");
+            trace!("input stream subscription {subscription:?} len {len}");
             self.reactor.wait_for(subscription).await;
         }
     }
@@ -342,12 +342,12 @@ impl AsyncRead for OwnedReadHalf {
     async fn read(&mut self, len: u64) -> Result<Vec<u8>, StreamError> {
         loop {
             let data = self.input_stream.read(len)?;
-            if !data.is_empty() {
+            if !data.is_empty() || len == 0 {
                 return Ok(data);
             }
 
             let subscription = self.input_stream.subscribe();
-            trace!("input stream subscription {subscription:?}");
+            trace!("input stream subscription {subscription:?} len {len}");
             self.reactor.wait_for(subscription).await;
 
             let data = self.input_stream.read(len)?;
@@ -426,7 +426,7 @@ impl OwnedWriteHalf {
                 return Ok(len);
             }
             let subscription = read.input_stream.subscribe();
-            trace!("input stream subscription {subscription:?}");
+            trace!("input stream subscription {subscription:?} len {len}");
             self.reactor.wait_for(subscription).await;
         }
     }

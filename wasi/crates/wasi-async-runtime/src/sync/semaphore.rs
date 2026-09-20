@@ -23,7 +23,7 @@ impl Semaphore {
         }
     }
 
-    pub fn acquire(&self) -> impl Future<Output = SemaphorePermit> {
+    pub fn acquire(&self) -> impl Future<Output = SemaphorePermit<'_>> {
         future::poll_fn(move |cx| {
             let mut this = self.inner.borrow_mut();
             if this.permits == 0 {

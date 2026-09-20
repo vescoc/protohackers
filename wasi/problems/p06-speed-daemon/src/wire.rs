@@ -147,7 +147,7 @@ trait PutDataType: BufMut {
 impl<T: BufMut> PutDataType for T {}
 
 macro_rules! some {
-    ($e:expr) => {{
+    ($e:expr_2021) => {{
         let Some(value) = $e else {
             return Ok(None);
         };

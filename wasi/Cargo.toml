@@ -10,34 +10,34 @@ members = [
     "problems/p04-unusual-database-program",
     "problems/p05-mob-in-the-middle",
     "problems/p06-speed-daemon",
+    "problems/p07-line-reversal",
 ]
 resolver = "2"
 
 [workspace.package]
 authors = ["Claudio Vesco"]
 description = "protohackets tasks (Rust WASI)"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
 futures = "0.3.30"
-futures-concurrency = "7.6.0"
-wit-bindgen-rt = { version = "0.24.0", features = ["bitflags"] }
-wasi = "0.13"
+futures-concurrency = "7.7.1"
+wit-bindgen-rt = { version = "0.44.0", features = ["bitflags"] }
+wasi = "0.14"
 wasi-async-runtime = { path = "crates/wasi-async-runtime" }
 wasi-async = { path = "crates/wasi-async" }
-thiserror = "1.0.58"
+thiserror = "2"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["std", "alloc", "env-filter", "fmt", "registry", "local-time", "tracing-log"] }
 tracing-futures = "0.2.5"
 clap = { version = "4.5.3", features = ["derive"] }
 anyhow = "1.0.80"
 slab = "0.4.9"
-hashbrown = "0.14.5"
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.116"
 bytes = "1.6.0"
-primes = "0.3.0"
+primes = "0.4.0"
 
 [workspace.lints.clippy]
 pedantic = "deny"

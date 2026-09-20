@@ -8,7 +8,6 @@ license.workspace = true
 
 [dependencies]
 futures.workspace = true
-futures-concurrency.workspace = true
 wit-bindgen-rt.workspace = true
 wasi.workspace = true
 wasi-async-runtime.workspace = true
