@@ -10,7 +10,7 @@ members = [
     "problems/p04-unusual-database-program",
     "problems/p05-mob-in-the-middle",
     "problems/p06-speed-daemon",
-    "problems/p07-line-reversal",
+#    "problems/p07-line-reversal",
 ]
 resolver = "2"
 
