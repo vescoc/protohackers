@@ -24,10 +24,10 @@ async fn async_test_session(reactor: Reactor) {
     let payload = b"ciccio cunicio";
     write.write_all(payload).await.unwrap();
     write.flush().await.unwrap();
-
     info!("done write");
 
     let data = read.read(1024).await.expect("cannot read");
+    info!("done read");
 
     assert_eq!(payload.as_slice(), data);
 }

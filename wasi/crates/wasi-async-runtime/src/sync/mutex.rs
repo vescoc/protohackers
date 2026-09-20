@@ -17,7 +17,7 @@ impl<T> Mutex<T> {
         }
     }
 
-    pub async fn lock(&self) -> MutexGuard<T> {
+    pub async fn lock(&self) -> MutexGuard<'_, T> {
         let permit = self.semaphore.acquire().await;
 
         // SAFETY: protect by a semaphore

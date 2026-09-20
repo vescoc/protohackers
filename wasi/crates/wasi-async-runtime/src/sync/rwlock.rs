@@ -32,33 +32,35 @@ impl<T> RwLock<T> {
     }
 
     #[instrument(skip_all)]
-    pub async fn write(&self) -> RwLockWriteGuard<T> {
+    pub async fn write(&self) -> RwLockWriteGuard<'_, T> {
         trace!("write");
         let permit = self.writer.acquire().await;
 
-        trace!("waiting notified");
-        self.notify.notified().await;
+        if unsafe { &*self.inner.get() }.readers > 0 {
+            trace!("waiting notified");
+            self.notify.notified().await;
+        }
+
+        debug_assert_eq!(unsafe { &*self.inner.get() }.readers, 0);
 
         trace!("ok");
         RwLockWriteGuard {
             _permit: permit,
-            notify: &self.notify,
             value: &mut unsafe { &mut *self.inner.get() }.value,
         }
     }
 
     #[instrument(skip_all)]
-    pub async fn read(&self) -> RwLockReadGuard<T> {
+    pub async fn read(&self) -> RwLockReadGuard<'_, T> {
         trace!("read");
-        {
-            let _ = self.writer.acquire().await;
-        }
+        let _ = self.writer.acquire().await;
 
         let readers = &mut unsafe { &mut *self.inner.get() }.readers;
         *readers += 1;
 
         RwLockReadGuard {
             value: &unsafe { &*self.inner.get() }.value,
+            notify: &self.notify,
             readers,
         }
     }
@@ -67,7 +69,6 @@ impl<T> RwLock<T> {
 #[derive(Debug)]
 pub struct RwLockWriteGuard<'a, T> {
     _permit: SemaphorePermit<'a>,
-    notify: &'a Notify,
     value: &'a mut T,
 }
 
@@ -85,15 +86,10 @@ impl<T> DerefMut for RwLockWriteGuard<'_, T> {
     }
 }
 
-impl<T> Drop for RwLockWriteGuard<'_, T> {
-    fn drop(&mut self) {
-        self.notify.notify_one();
-    }
-}
-
 #[derive(Debug)]
 pub struct RwLockReadGuard<'a, T> {
     value: &'a T,
+    notify: &'a Notify,
     readers: &'a mut usize,
 }
 
@@ -108,6 +104,9 @@ impl<T> Deref for RwLockReadGuard<'_, T> {
 impl<T> Drop for RwLockReadGuard<'_, T> {
     fn drop(&mut self) {
         *self.readers -= 1;
+        if *self.readers == 0 {
+            self.notify.notify_one();
+        }
     }
 }
 
@@ -141,7 +140,7 @@ mod tests {
 
                     trace!("handle_1: {value}");
 
-                    assert!((0..=1).contains(value));
+                    assert!((0..=2).contains(value));
                 })
             };
 
@@ -152,7 +151,7 @@ mod tests {
 
                     trace!("handle_2: {value}");
 
-                    assert!((0..=1).contains(value));
+                    assert!((0..=2).contains(value));
                 })
             };
 
@@ -167,6 +166,17 @@ mod tests {
                 })
             };
 
+            let handle_5 = {
+                let rw = rw.clone();
+                reactor.spawn(async move {
+                    let value = &mut *rw.write().await;
+
+                    *value += 1;
+                    
+                    trace!("handle_5: {value}");
+                })
+            };
+
             let handle_4 = {
                 let rw = rw.clone();
                 reactor.spawn(async move {
@@ -174,11 +184,11 @@ mod tests {
 
                     trace!("handle_4: {value}");
 
-                    assert!((0..=1).contains(value));
+                    assert!((0..=2).contains(value));
                 })
             };
 
-            (handle_1, handle_2, handle_3, handle_4).join().await
+            (handle_1, handle_2, handle_3, handle_4, handle_5).join().await
         });
     }
 }

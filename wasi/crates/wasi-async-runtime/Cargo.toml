@@ -14,7 +14,6 @@ package = "component:wasi-async-runtime"
 wit-bindgen-rt.workspace = true
 wasi.workspace = true
 slab.workspace = true
-hashbrown.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

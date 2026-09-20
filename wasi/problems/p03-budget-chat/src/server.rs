@@ -31,7 +31,7 @@ fn is_username_valid(clients: &HashMap<Id, ClientInfo>, username: &str) -> bool 
              }| {
                 other_username
                     .as_ref()
-                    .map_or(true, |other_username| **other_username != username)
+                    .is_none_or(|other_username| **other_username != username)
             },
         )
 }

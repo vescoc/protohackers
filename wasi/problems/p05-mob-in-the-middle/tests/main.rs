@@ -27,7 +27,16 @@ fn test_session() {
                 .unwrap();
         let (read_alice, mut write_alice) = stream_alice.split();
         let mut read_alice = FramedRead::new(read_alice, LinesDecoder::new());
+        
         write_alice.write_all(b"alice\n").await.unwrap();
+        info!("write alice");        
+
+        let result = read_alice.next().await.unwrap().unwrap();
+        info!("read alice");        
+        assert_eq!(
+            std::str::from_utf8(&result).unwrap(),
+            "Welcome to budgetchat! What shall I call you?"
+        );
 
         let mut stream_bob = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
             .await
@@ -36,12 +45,14 @@ fn test_session() {
         let mut read_bob = FramedRead::new(read_bob, LinesDecoder::new());
 
         let result = read_bob.next().await.unwrap().unwrap();
+        info!("read bob");        
         assert_eq!(
             std::str::from_utf8(&result).unwrap(),
             "Welcome to budgetchat! What shall I call you?"
         );
 
         write_bob.write_all(b"bob\n").await.unwrap();
+        info!("write bob");        
 
         let result = read_bob.next().await.unwrap().unwrap();
         assert_eq!(result, b"* The room contains: alice");

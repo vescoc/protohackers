@@ -67,15 +67,15 @@ where
         match self.decoder.decode_eof(&mut self.buffer) {
             Ok(None) => {
                 error!("decoder eof returned Ok(None)");
-                return Poll::Ready(Some(Err(StreamError::Closed.into())));
+                Poll::Ready(Some(Err(StreamError::Closed.into())))
             }
             Ok(Some(v)) => {
                 trace!("some data");
-                return Poll::Ready(Some(Ok(v)));
+                Poll::Ready(Some(Ok(v)))
             }
             Err(e) => {
                 trace!("error");
-                return Poll::Ready(Some(Err(e)));
+                Poll::Ready(Some(Err(e)))
             }
         }
     }
@@ -185,11 +185,11 @@ impl<W: AsyncWrite + Unpin, E: Encoder<Item> + Unpin, Item> Sink<Item> for Frame
         }
 
         let flush = pin!(this.write.flush());
-        if let Poll::Ready(Err(err)) = flush.poll(cx) {
+        match flush.poll(cx) { Poll::Ready(Err(err)) => {
             Poll::Ready(Err(err.into()))
-        } else {
+        } _ => {
             Poll::Ready(Ok(()))
-        }
+        }}
     }
 
     #[instrument(skip_all)]
