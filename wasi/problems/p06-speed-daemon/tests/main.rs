@@ -25,7 +25,7 @@ fn test_session() {
                 .await
                 .unwrap();
             let (_, write) = stream.split();
-            let mut write = FramedWrite::new(write, wire::PacketCodec);
+            let mut write = std::pin::pin!(FramedWrite::new(write, wire::PacketCodec).into_sink());
 
             write
                 .send(wire::Packet::IAmCamera {
@@ -53,7 +53,7 @@ fn test_session() {
                 .await
                 .unwrap();
             let (_, write) = stream.split();
-            let mut write = FramedWrite::new(write, wire::PacketCodec);
+            let mut write = std::pin::pin!(FramedWrite::new(write, wire::PacketCodec).into_sink());
 
             write
                 .send(wire::Packet::IAmCamera {
@@ -81,8 +81,8 @@ fn test_session() {
                 .await
                 .unwrap();
             let (read, write) = stream.split();
-            let mut read = FramedRead::new(read, wire::PacketCodec);
-            let mut write = FramedWrite::new(write, wire::PacketCodec);
+            let mut read = std::pin::pin!(FramedRead::new(read, wire::PacketCodec).into_stream());
+            let mut write = std::pin::pin!(FramedWrite::new(write, wire::PacketCodec).into_sink());
 
             write
                 .send(wire::Packet::IAmDispatcher { roads: vec![123] })

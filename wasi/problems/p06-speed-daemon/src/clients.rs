@@ -40,8 +40,8 @@ pub(crate) async fn handle(
     let mut heartbeat = heartbeat::Heartbeat::new(reactor);
 
     let (read, write) = stream.split();
-    let mut read = FramedRead::new(read, wire::PacketCodec);
-    let mut write = FramedWrite::new(write, wire::PacketCodec);
+    let mut read = std::pin::pin!(FramedRead::new(read, wire::PacketCodec).into_stream());
+    let mut write = std::pin::pin!(FramedWrite::new(write, wire::PacketCodec).into_sink());
 
     let r: Result<(), Error> = async {
         match identify(&mut heartbeat, &mut read, &mut write).await? {
