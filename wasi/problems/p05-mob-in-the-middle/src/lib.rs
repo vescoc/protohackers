@@ -185,12 +185,12 @@ async fn handle(
     };
 
     let (client_read, mut client_write) = stream.split();
-    let mut client_read = FramedRead::new(client_read, LinesDecoder::new());
+    let mut client_read = std::pin::pin!(FramedRead::new(client_read, LinesDecoder::new()).into_stream());
 
     let mut chat_stream =
         TcpStream::connect(reactor.clone(), format!("{chat_address}:{chat_port}")).await?;
     let (chat_read, mut chat_write) = chat_stream.split();
-    let mut chat_read = FramedRead::new(chat_read, LinesDecoder::new());
+    let mut chat_read = std::pin::pin!(FramedRead::new(chat_read, LinesDecoder::new()).into_stream());
 
     let mut done_upstream = false;
     let mut done_downstream = false;

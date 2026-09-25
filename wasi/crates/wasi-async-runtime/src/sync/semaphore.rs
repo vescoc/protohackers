@@ -8,6 +8,9 @@ struct SemaphoreInner {
     queue: Vec<Waker>,
 }
 
+/// Single thread semaphore
+///
+/// The implementation is valid only in single thread environment
 #[derive(Debug)]
 pub struct Semaphore {
     inner: RefCell<SemaphoreInner>,
@@ -34,6 +37,16 @@ impl Semaphore {
                 Poll::Ready(SemaphorePermit { this: self })
             }
         })
+    }
+
+    pub fn try_acquire(&self) -> Option<SemaphorePermit<'_>> {
+        let mut this = self.inner.borrow_mut();
+        if this.permits > 0 {
+            this.permits -= 1;
+            Some(SemaphorePermit { this: self })
+        } else {
+            None
+        }
     }
 }
 

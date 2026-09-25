@@ -26,7 +26,7 @@ fn test_session() {
                 .await
                 .unwrap();
         let (read_alice, mut write_alice) = stream_alice.split();
-        let mut read_alice = FramedRead::new(read_alice, LinesDecoder::new());
+        let mut read_alice = std::pin::pin!(FramedRead::new(read_alice, LinesDecoder::new()).into_stream());
         
         write_alice.write_all(b"alice\n").await.unwrap();
         info!("write alice");        
@@ -42,7 +42,7 @@ fn test_session() {
             .await
             .unwrap();
         let (read_bob, mut write_bob) = stream_bob.split();
-        let mut read_bob = FramedRead::new(read_bob, LinesDecoder::new());
+        let mut read_bob = std::pin::pin!(FramedRead::new(read_bob, LinesDecoder::new()).into_stream());
 
         let result = read_bob.next().await.unwrap().unwrap();
         info!("read bob");        

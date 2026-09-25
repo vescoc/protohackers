@@ -17,34 +17,37 @@ fn test_session() {
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
-        let mut read = FramedRead::new(read, ChunksDecoder::<4>::new());
+        {
+            let mut read =
+                std::pin::pin!(FramedRead::new(read, ChunksDecoder::<4>::new()).into_stream());
 
-        write
-            .write_all([0x49, 0x00, 0x00, 0x30, 0x39, 0x00, 0x00, 0x00, 0x65].as_slice())
-            .await
-            .unwrap();
-        write
-            .write_all([0x49, 0x00, 0x00, 0x30, 0x3a, 0x00, 0x00, 0x00, 0x66].as_slice())
-            .await
-            .unwrap();
-        write
-            .write_all([0x49, 0x00, 0x00, 0x30, 0x3b, 0x00, 0x00, 0x00, 0x64].as_slice())
-            .await
-            .unwrap();
-        write
-            .write_all([0x49, 0x00, 0x00, 0xa0, 0x00, 0x00, 0x00, 0x00, 0x05].as_slice())
-            .await
-            .unwrap();
-        write
-            .write_all([0x51, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x40, 0x00].as_slice())
-            .await
-            .unwrap();
-        write.flush().await.unwrap();
+            write
+                .write_all([0x49, 0x00, 0x00, 0x30, 0x39, 0x00, 0x00, 0x00, 0x65].as_slice())
+                .await
+                .unwrap();
+            write
+                .write_all([0x49, 0x00, 0x00, 0x30, 0x3a, 0x00, 0x00, 0x00, 0x66].as_slice())
+                .await
+                .unwrap();
+            write
+                .write_all([0x49, 0x00, 0x00, 0x30, 0x3b, 0x00, 0x00, 0x00, 0x64].as_slice())
+                .await
+                .unwrap();
+            write
+                .write_all([0x49, 0x00, 0x00, 0xa0, 0x00, 0x00, 0x00, 0x00, 0x05].as_slice())
+                .await
+                .unwrap();
+            write
+                .write_all([0x51, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x40, 0x00].as_slice())
+                .await
+                .unwrap();
+            write.flush().await.unwrap();
 
-        assert_eq!(
-            [0x00, 0x00, 0x00, 0x65],
-            read.next().await.unwrap().unwrap()
-        );
+            assert_eq!(
+                [0x00, 0x00, 0x00, 0x65],
+                read.next().await.unwrap().unwrap()
+            );
+        }
 
         stream.close().await.unwrap();
     });

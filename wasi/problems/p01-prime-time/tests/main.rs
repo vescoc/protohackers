@@ -23,12 +23,14 @@ fn test_invalid_number_float() {
         write.write(b"\n").await.unwrap();
         write.flush().await.unwrap();
 
-        let mut read = FramedRead::new(read, LinesDecoder::new());
+        {
+            let mut read = std::pin::pin!(FramedRead::new(read, LinesDecoder::new()).into_stream());
 
-        let line = read.next().await.expect("stream empty").unwrap();
+            let line = read.next().await.expect("stream empty").unwrap();
 
-        let response: p01_prime_time::Response = serde_json::from_slice(&line).unwrap();
-        assert!(!response.prime);
+            let response: p01_prime_time::Response = serde_json::from_slice(&line).unwrap();
+            assert!(!response.prime);
+        }
 
         stream.close().await.ok();
     });
@@ -43,17 +45,19 @@ fn test_invalid_number() {
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
-        let mut read = FramedRead::new(read, LinesDecoder::new());
+        {
+            let mut read = std::pin::pin!(FramedRead::new(read, LinesDecoder::new()).into_stream());
 
-        let payload = br#"{"method":"isPrime","number":"not a number"}"#;
-        write.write_all(payload).await.unwrap();
-        write.write(b"\n").await.unwrap();
-        write.flush().await.unwrap();
+            let payload = br#"{"method":"isPrime","number":"not a number"}"#;
+            write.write_all(payload).await.unwrap();
+            write.write(b"\n").await.unwrap();
+            write.flush().await.unwrap();
 
-        let line = read.next().await.expect("stream empty").unwrap();
+            let line = read.next().await.expect("stream empty").unwrap();
 
-        assert_eq!(&line, b"MALFORMED");
-
+            assert_eq!(&line, b"MALFORMED");
+        }
+        
         stream.close().await.ok();
     });
 }
@@ -67,17 +71,19 @@ fn test_ignore_field() {
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
-        let mut read = FramedRead::new(read, LinesDecoder::new());
+        {
+            let mut read = std::pin::pin!(FramedRead::new(read, LinesDecoder::new()).into_stream());
 
-        let payload = br#"{"method":"isPrime","number":3,"ignored":false}"#;
-        write.write_all(payload).await.unwrap();
-        write.write(b"\n").await.unwrap();
-        write.flush().await.unwrap();
+            let payload = br#"{"method":"isPrime","number":3,"ignored":false}"#;
+            write.write_all(payload).await.unwrap();
+            write.write(b"\n").await.unwrap();
+            write.flush().await.unwrap();
 
-        let line = read.next().await.unwrap().unwrap();
+            let line = read.next().await.unwrap().unwrap();
 
-        let response: p01_prime_time::Response = serde_json::from_slice(&line).unwrap();
-        assert!(response.prime);
+            let response: p01_prime_time::Response = serde_json::from_slice(&line).unwrap();
+            assert!(response.prime);
+        }
 
         stream.close().await.ok();
     });
@@ -92,16 +98,18 @@ fn test_invalid_message() {
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
-        let mut read = FramedRead::new(read, LinesDecoder::new());
+        {
+            let mut read = std::pin::pin!(FramedRead::new(read, LinesDecoder::new()).into_stream());
 
-        let payload = br#"{"method":"bho","number":3}"#;
-        write.write_all(payload).await.unwrap();
-        write.write(b"\n").await.unwrap();
-        write.flush().await.unwrap();
+            let payload = br#"{"method":"bho","number":3}"#;
+            write.write_all(payload).await.unwrap();
+            write.write(b"\n").await.unwrap();
+            write.flush().await.unwrap();
 
-        let line = read.next().await.unwrap().unwrap();
+            let line = read.next().await.unwrap().unwrap();
 
-        assert_eq!(&line, b"MALFORMED");
+            assert_eq!(&line, b"MALFORMED");
+        }
 
         stream.close().await.ok();
     });
@@ -116,16 +124,18 @@ fn test_invalid_json() {
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
-        let mut read = FramedRead::new(read, LinesDecoder::new());
+        {
+            let mut read = std::pin::pin!(FramedRead::new(read, LinesDecoder::new()).into_stream());
 
-        let payload = br#"{"method":"bho","number":3"#;
-        write.write_all(payload).await.unwrap();
-        write.write(b"\n").await.unwrap();
-        write.flush().await.unwrap();
+            let payload = br#"{"method":"bho","number":3"#;
+            write.write_all(payload).await.unwrap();
+            write.write(b"\n").await.unwrap();
+            write.flush().await.unwrap();
 
-        let line = read.next().await.unwrap().unwrap();
+            let line = read.next().await.unwrap().unwrap();
 
-        assert_eq!(&line, b"MALFORMED");
+            assert_eq!(&line, b"MALFORMED");
+        }
     });
 }
 
@@ -139,17 +149,19 @@ fn test_is_prime() {
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
-        let mut read = FramedRead::new(read, LinesDecoder::new());
+        {
+            let mut read = std::pin::pin!(FramedRead::new(read, LinesDecoder::new()).into_stream());
 
-        let payload = br#"{"method":"isPrime","number":3}"#;
-        write.write(payload).await.unwrap();
-        write.write(b"\n").await.unwrap();
-        write.flush().await.unwrap();
+            let payload = br#"{"method":"isPrime","number":3}"#;
+            write.write(payload).await.unwrap();
+            write.write(b"\n").await.unwrap();
+            write.flush().await.unwrap();
 
-        let line = read.next().await.unwrap().unwrap();
+            let line = read.next().await.unwrap().unwrap();
 
-        let response: p01_prime_time::Response = serde_json::from_slice(&line).unwrap();
-        assert!(response.prime);
+            let response: p01_prime_time::Response = serde_json::from_slice(&line).unwrap();
+            assert!(response.prime);
+        }
 
         stream.close().await.ok();
     });
@@ -164,17 +176,19 @@ fn test_not_is_prime() {
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
-        let mut read = FramedRead::new(read, LinesDecoder::new());
+        {
+            let mut read = std::pin::pin!(FramedRead::new(read, LinesDecoder::new()).into_stream());
 
-        let payload = br#"{"method":"isPrime","number":10}"#;
-        write.write_all(payload).await.unwrap();
-        write.write(b"\n").await.unwrap();
-        write.flush().await.unwrap();
+            let payload = br#"{"method":"isPrime","number":10}"#;
+            write.write_all(payload).await.unwrap();
+            write.write(b"\n").await.unwrap();
+            write.flush().await.unwrap();
 
-        let line = read.next().await.unwrap().unwrap();
+            let line = read.next().await.unwrap().unwrap();
 
-        let response: p01_prime_time::Response = serde_json::from_slice(&line).unwrap();
-        assert!(!response.prime);
+            let response: p01_prime_time::Response = serde_json::from_slice(&line).unwrap();
+            assert!(!response.prime);
+        }
 
         stream.close().await.ok();
     });

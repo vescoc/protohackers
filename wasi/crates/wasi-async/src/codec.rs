@@ -1,8 +1,6 @@
-use std::future::Future;
-use std::pin::{pin, Pin};
-use std::task::{Context, Poll};
+use std::marker;
 
-use futures::{ready, Sink, Stream};
+use futures::{Sink, Stream, sink, stream};
 
 use tracing::{error, instrument, trace, warn};
 
@@ -38,8 +36,6 @@ pub trait Encoder<Item> {
 pub struct FramedRead<R, D> {
     read: R,
     decoder: D,
-    buffer: BytesMut,
-    eof: bool,
 }
 
 impl<R, D> FramedRead<R, D> {
@@ -47,158 +43,118 @@ impl<R, D> FramedRead<R, D> {
         Self {
             read,
             decoder,
-            buffer: BytesMut::new(),
-            eof: false,
         }
     }
 }
 
-impl<R: AsyncRead + Unpin, D: Decoder + Unpin> FramedRead<R, D>
-where
-    Self: Stream<Item = Result<D::Item, D::Error>>,
-{
+impl<R: AsyncRead + Unpin, D: Decoder + Unpin> FramedRead<R, D> {
     #[instrument(skip_all)]
-    fn handle_eof(&mut self) -> Poll<Option<<Self as Stream>::Item>> {
-        if self.buffer.is_empty() {
+    pub fn into_stream(self) -> impl Stream<Item = Result<D::Item, D::Error>> {
+        stream::unfold(
+            (self.read, self.decoder, BytesMut::new(), false),
+            |(mut reader, mut decoder, mut buffer, mut eof)| async move {
+                loop {
+                    if eof {
+                        let yielded = Self::handle_eof(&mut decoder, &mut buffer)?;
+                        return Some((yielded, (reader, decoder, buffer, eof)));
+                    }
+
+                    trace!("decode {}", buffer.len());
+                    match decoder.decode(&mut buffer) {
+                        Ok(Some(value)) => {
+                            return Some((Ok(value), (reader, decoder, buffer, eof)));
+                        }
+                        Err(e) => {
+                            return Some((Err(e), (reader, decoder, buffer, eof)));
+                        }
+                        Ok(None) => {}
+                    }
+
+                    let len = buffer.capacity().max(1) as u64;
+                    let (data, current_eof) = {
+                        trace!("read {len}/{}", buffer.len());
+                        match reader.read(len).await {
+                            Ok(data) => (Some(data), false),
+                            Err(StreamError::Closed) => (None, true),
+                            Err(e) => return Some((Err(e.into()), (reader, decoder, buffer, eof))),
+                        }
+                    };
+
+                    if current_eof {
+                        eof = true;
+                        continue;
+                    }
+
+                    let data = data.unwrap();
+
+                    trace!("extend slice {}", data.len());
+                    buffer.extend_from_slice(&data);
+                }
+            },
+        )
+    }
+
+    #[instrument(skip_all)]
+    fn handle_eof(decoder: &mut D, buffer: &mut BytesMut) -> Option<Result<D::Item, D::Error>> {
+        if buffer.is_empty() {
             trace!("buffer is empty");
-            return Poll::Ready(None);
+            return None;
         }
 
-        match self.decoder.decode_eof(&mut self.buffer) {
+        match decoder.decode_eof(buffer) {
             Ok(None) => {
                 error!("decoder eof returned Ok(None)");
-                Poll::Ready(Some(Err(StreamError::Closed.into())))
+                Some(Err(StreamError::Closed.into()))
             }
             Ok(Some(v)) => {
                 trace!("some data");
-                Poll::Ready(Some(Ok(v)))
+                Some(Ok(v))
             }
             Err(e) => {
                 trace!("error");
-                Poll::Ready(Some(Err(e)))
+                Some(Err(e))
             }
         }
     }
 }
 
-impl<R: AsyncRead + Unpin, D: Decoder + Unpin> Stream for FramedRead<R, D> {
-    type Item = Result<D::Item, D::Error>;
-
-    #[instrument(skip_all)]
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let this = self.get_mut();
-
-        loop {
-            if this.eof {
-                return this.handle_eof();
-            }
-
-            trace!("decode {}", this.buffer.len());
-            match this.decoder.decode(&mut this.buffer) {
-                Ok(Some(value)) => return Poll::Ready(Some(Ok(value))),
-                Err(e) => return Poll::Ready(Some(Err(e))),
-                Ok(None) => {}
-            }
-
-            let read = &mut this.read;
-            let len = this.buffer.capacity().max(1) as u64;
-            let (data, eof) = {
-                trace!("read {len}/{}", this.buffer.len());
-                let f = pin!(read.read(len));
-                match f.poll(cx) {
-                    Poll::Ready(Ok(data)) => (Some(data), false),
-                    Poll::Ready(Err(StreamError::Closed)) => (None, true),
-                    Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
-                    Poll::Pending => return Poll::Pending,
-                }
-            };
-
-            if eof {
-                this.eof = true;
-                continue;
-            }
-
-            let data = data.unwrap();
-
-            trace!("extend slice {}", data.len());
-            this.buffer.extend_from_slice(&data);
-        }
-    }
-}
-
-pub struct FramedWrite<W, E> {
+pub struct FramedWrite<W, Item, E> {
     write: W,
     encoder: E,
-    buffer: BytesMut,
-    backpressure_boundary: usize,
+    _item: marker::PhantomData<Item>,
 }
 
-impl<W, E> FramedWrite<W, E> {
+impl<W, Item, E> FramedWrite<W, Item, E> {
     pub fn new(write: W, encoder: E) -> Self {
         Self {
             write,
             encoder,
-            buffer: BytesMut::with_capacity(INITIAL_CAPACITY),
-            backpressure_boundary: INITIAL_CAPACITY,
+            _item: marker::PhantomData,
         }
     }
 }
 
-impl<W: AsyncWrite + Unpin, E: Encoder<Item> + Unpin, Item> Sink<Item> for FramedWrite<W, E> {
-    type Error = E::Error;
-
+impl<W: AsyncWrite + Unpin, E: Encoder<Item> + Unpin, Item> FramedWrite<W, Item, E> {
     #[instrument(skip_all)]
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        if self.buffer.len() >= self.backpressure_boundary {
-            self.as_mut().poll_flush(cx)
-        } else {
-            Poll::Ready(Ok(()))
-        }
-    }
-
-    #[instrument(skip_all)]
-    fn start_send(self: Pin<&mut Self>, item: Item) -> Result<(), Self::Error> {
-        let this = self.get_mut();
-        trace!("send {}", this.buffer.len());
-        this.encoder.encode(item, &mut this.buffer)
-    }
-
-    #[instrument(skip_all)]
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        let this = self.get_mut();
-
-        trace!("buffer len: {}", this.buffer.len());
-
-        while !this.buffer.is_empty() {
-            let n = {
-                let write = pin!(this.write.write(&this.buffer));
-                match write.poll(cx) {
-                    Poll::Ready(Ok(n)) => n,
-                    Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
-                    Poll::Pending => return Poll::Pending,
+    pub fn into_sink(self) -> impl Sink<Item, Error = E::Error> {
+        sink::unfold(
+            (self.write, self.encoder, BytesMut::with_capacity(INITIAL_CAPACITY)),
+            |(mut writer, mut encoder, mut buffer), item| async move {
+                encoder.encode(item, &mut buffer)?;
+                
+                assert!(!buffer.is_empty());
+                
+                while !buffer.is_empty() {
+                    let n = writer.write(&buffer).await?;
+                    trace!("sent {n} bytes");
+                    let _ = buffer.split_to(n as usize);
                 }
-            };
 
-            trace!("sent {n} bytes");
+                writer.flush().await?;
 
-            let _ = this.buffer.split_to(n as usize);
-        }
-
-        let flush = pin!(this.write.flush());
-        match flush.poll(cx) { Poll::Ready(Err(err)) => {
-            Poll::Ready(Err(err.into()))
-        } _ => {
-            Poll::Ready(Ok(()))
-        }}
-    }
-
-    #[instrument(skip_all)]
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        trace!("close");
-
-        ready!(self.as_mut().poll_flush(cx))?;
-
-        Poll::Ready(Ok(()))
+                Ok((writer, encoder, buffer))
+            },
+        )
     }
 }
 

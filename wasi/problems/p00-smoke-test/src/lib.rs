@@ -4,7 +4,7 @@ use wasi::io::streams::StreamError;
 use wasi::sockets::network::{ErrorCode, IpSocketAddress};
 
 use thiserror::Error;
-use tracing::{info, debug, instrument};
+use tracing::{debug, info, instrument};
 
 use wasi_async::io::AsyncWrite;
 use wasi_async::net::TcpStream;

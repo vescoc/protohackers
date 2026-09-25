@@ -65,7 +65,7 @@ Note that:
 * While rare, prices can go negative.
 
 * Behaviour is undefined if there are multiple prices with the
-same timestamp from the same client.
+  same timestamp from the same client.
 
 For example, to insert a price of 101 pence at timestamp 12345, a
 client would send:

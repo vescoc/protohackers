@@ -38,7 +38,7 @@ For example:
 - `foo=bar=baz` will insert a key foo with value "bar=baz".
 
 - `foo=` will insert a key foo with value "" (i.e. the empty
-string).
+  string).
 
 - `foo===` will insert a key foo with value "==".
 

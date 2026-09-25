@@ -73,7 +73,7 @@ fn test_session() {
             .await
             .expect("cannot connect");
         let (read_alice, mut write_alice) = stream_alice.split();
-        let mut read_alice = FramedRead::new(read_alice, LinesDecoder::new());
+        let mut read_alice = std::pin::pin!(FramedRead::new(read_alice, LinesDecoder::new()).into_stream());
 
         debug!("waiting welcome message");
         let result = read_alice.next().await.unwrap().unwrap();
@@ -127,7 +127,7 @@ fn test_not_joining() {
             .await
             .expect("cannot connect");
         let (read_alice, mut write_alice) = stream_alice.split();
-        let mut read_alice = FramedRead::new(read_alice, LinesDecoder::new());
+        let mut read_alice = std::pin::pin!(FramedRead::new(read_alice, LinesDecoder::new()).into_stream());
 
         tracing::debug!("waiting welcome message");
         let result = read_alice.next().await.unwrap().unwrap();

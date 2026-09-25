@@ -197,10 +197,11 @@ pub(crate) async fn handle_client(
     let (read, write) = stream.split();
     let client = Client {
         id,
-        read: FramedRead::new(read, LinesDecoder::new())
-            .map_ok(|line| String::from_utf8_lossy(&line).into_owned())
-            .fuse(),
-        write: FramedWrite::new(write, LinesEncoder),
+        read: std::pin::pin!(FramedRead::new(read, LinesDecoder::new())
+                             .into_stream()
+                             .map_ok(|line| String::from_utf8_lossy(&line).into_owned())
+                             .fuse()),
+        write: std::pin::pin!(FramedWrite::new(write, LinesEncoder).into_sink()),
         server: &mut server,
         client,
         _state: PhantomData::<WaitingWelcome>,

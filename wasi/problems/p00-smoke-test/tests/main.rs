@@ -1,7 +1,7 @@
 use std::sync::Once;
 
 use wasi_async::net::TcpStream;
-use wasi_async_runtime::{block_on, Reactor};
+use wasi_async_runtime::{Reactor, block_on};
 
 use tracing::info;
 

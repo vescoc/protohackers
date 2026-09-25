@@ -23,6 +23,11 @@ pub enum Error {
     UdpSocket(#[from] network::ErrorCode),
 }
 
+/// Solve the problem
+///
+/// # Errors
+///
+/// * [`Error`] - errors
 #[instrument(skip_all)]
 pub async fn run(socket: UdpSocket) -> Result<(), Error> {
     let mut data = HashMap::new();

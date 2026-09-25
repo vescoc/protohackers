@@ -47,6 +47,11 @@ pub enum Error {
     Mean(#[from] TryFromIntError),
 }
 
+/// Solve problem
+///
+/// # Errors
+///
+/// * [`Error`] - error
 #[instrument(skip(stream))]
 pub async fn run(address: IpSocketAddress, mut stream: TcpStream) -> Result<(), Error> {
     info!("run");
@@ -55,8 +60,12 @@ pub async fn run(address: IpSocketAddress, mut stream: TcpStream) -> Result<(), 
 
     let (read, write) = stream.split();
     let r = async move {
-        let mut read = FramedRead::new(read, ChunksDecoder::<9>::new()).map(parse);
-        let mut write = FramedWrite::new(write, I32Encoder::new());
+        let mut read = std::pin::pin!(
+            FramedRead::new(read, ChunksDecoder::<9>::new())
+                .into_stream()
+                .map(parse)
+        );
+        let mut write = std::pin::pin!(FramedWrite::new(write, I32Encoder::new()).into_sink());
 
         while let Some(value) = read.next().await {
             match value? {

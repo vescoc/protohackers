@@ -50,7 +50,7 @@ pub async fn run(address: IpSocketAddress, mut stream: TcpStream) -> Result<(), 
 
     let (read, mut write) = stream.split();
     let r = async move {
-        let mut read = FramedRead::new(read, LinesDecoder::new());
+        let mut read = std::pin::pin!(FramedRead::new(read, LinesDecoder::new()).into_stream());
 
         while let Some(value) = read.next().await {
             let value = value?;
