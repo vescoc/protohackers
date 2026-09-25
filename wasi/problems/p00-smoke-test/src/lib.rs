@@ -21,6 +21,7 @@ pub enum Error {
     TcpSocket(#[from] ErrorCode),
 }
 
+/// # Errors
 #[instrument(skip(stream))]
 pub async fn run(address: IpSocketAddress, mut stream: TcpStream) -> Result<(), Error> {
     info!("run: {address:?}");
@@ -42,7 +43,7 @@ pub async fn run(address: IpSocketAddress, mut stream: TcpStream) -> Result<(), 
     stream.close().await.ok();
 
     match r {
-        Err(Error::Stream(StreamError::Closed)) | Ok(_) => Ok(()),
+        Err(Error::Stream(StreamError::Closed)) | Ok(()) => Ok(()),
         Err(e) => Err(e),
     }
 }

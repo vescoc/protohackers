@@ -19,3 +19,6 @@ tracing.workspace = true
 [dev-dependencies]
 futures-concurrency.workspace = true
 tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

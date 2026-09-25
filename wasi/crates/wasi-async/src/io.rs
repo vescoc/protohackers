@@ -15,6 +15,7 @@ pub trait AsyncWrite {
 }
 
 pub trait AsyncWriteExt: AsyncWrite {
+    #[expect(clippy::cast_possible_truncation, reason = "can happen")]
     fn write_all(&mut self, mut data: &[u8]) -> impl Future<Output = Result<(), StreamError>> {
         async move {
             while !data.is_empty() {
@@ -36,6 +37,7 @@ pub trait AsyncWriteExt: AsyncWrite {
 impl<T: AsyncWrite> AsyncWriteExt for T {}
 
 impl AsyncRead for &[u8] {
+    #[expect(clippy::cast_possible_truncation, reason = "can happen")]
     fn read(&mut self, len: u64) -> impl Future<Output = Result<Vec<u8>, StreamError>> {
         let len = len as usize;
         let len = len.min(self.len());
@@ -46,15 +48,18 @@ impl AsyncRead for &[u8] {
 }
 
 impl AsyncWrite for &mut Vec<u8> {
+    #[expect(clippy::unused_async_trait_impl)]
     async fn write(&mut self, data: &[u8]) -> Result<u64, StreamError> {
         self.extend_from_slice(data);
         Ok(data.len() as u64)
     }
 
+    #[expect(clippy::unused_async_trait_impl)]
     async fn flush(&mut self) -> Result<(), StreamError> {
         Ok(())
     }
 
+    #[expect(clippy::unused_async_trait_impl)]
     async fn close(&mut self) -> Result<(), StreamError> {
         Ok(())
     }

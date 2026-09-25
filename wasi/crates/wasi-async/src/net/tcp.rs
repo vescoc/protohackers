@@ -1,8 +1,5 @@
-use std::future::Future;
 use std::mem::ManuallyDrop;
-use std::pin::pin;
 use std::rc::Rc;
-use std::task::Poll;
 
 use futures::{stream, Stream};
 
@@ -26,6 +23,7 @@ pub struct TcpListener {
 }
 
 impl TcpListener {
+    /// # Errors
     #[instrument(skip_all)]
     pub async fn bind(reactor: Reactor, address: impl ToSocketAddrs) -> Result<Self, ErrorCode> {
         let network = instance_network();
@@ -72,41 +70,44 @@ impl TcpListener {
     pub fn into_stream(
         self,
     ) -> impl Stream<Item = Result<(TcpStream, IpSocketAddress), ErrorCode>> {
-        stream::poll_fn(move |cx| {
-            let reactor = self.reactor.clone();
-            let subscription = self.socket.subscribe();
-            trace!("socket subscription {subscription:?}");
-            let wait_for = pin!(reactor.wait_for(subscription));
-            if wait_for.poll(cx).is_pending() {
-                return Poll::Pending;
-            }
+        stream::unfold(self, |this| async move {
+            let reactor = this.reactor.clone();
 
-            match self.socket.accept() {
+            let subscription = this.socket.subscribe();
+
+            trace!("into_stream socket subscription {subscription:?}");
+            reactor.wait_for(subscription).await;
+
+            match this.socket.accept() {
                 Ok((socket, input_stream, output_stream)) => {
                     let address = match socket.remote_address() {
                         Ok(address) => address,
-                        Err(err) => return Poll::Ready(Some(Err(err))),
+                        Err(err) => return Some((Err(err), this)),
                     };
 
-                    Poll::Ready(Some(Ok((
-                        TcpStream(Some(TcpStreamInner {
-                            reactor: self.reactor.clone(),
-                            socket: ManuallyDrop::new(socket),
-                            input_stream: ManuallyDrop::new(input_stream),
-                            output_stream: ManuallyDrop::new(output_stream),
-                        })),
-                        address,
-                    ))))
+                    Some((
+                        Ok((
+                            TcpStream(Some(TcpStreamInner {
+                                reactor: this.reactor.clone(),
+                                socket: ManuallyDrop::new(socket),
+                                input_stream: ManuallyDrop::new(input_stream),
+                                output_stream: ManuallyDrop::new(output_stream),
+                            })),
+                            address,
+                        )),
+                        this,
+                    ))
                 }
-                Err(err) => Poll::Ready(Some(Err(err))),
+                Err(err) => Some((Err(err), this)),
             }
         })
     }
 
+    /// # Errors
     #[instrument(skip_all)]
     pub async fn accept(&self) -> Result<(TcpStream, IpSocketAddress), ErrorCode> {
         let subscription = self.socket.subscribe();
-        trace!("socket subscription {subscription:?}");
+        trace!("accept socket subscription {subscription:?}");
         self.reactor.wait_for(subscription).await;
 
         let (socket, input_stream, output_stream) = self.socket.accept()?;
@@ -124,6 +125,7 @@ impl TcpListener {
         ))
     }
 
+    /// # Errors
     pub fn local_addr(&self) -> Result<LocalSocketAddress, ErrorCode> {
         match self.socket.local_address()? {
             IpSocketAddress::Ipv4(Ipv4SocketAddress { port, .. })
@@ -143,6 +145,7 @@ struct TcpStreamInner {
 pub struct TcpStream(Option<TcpStreamInner>);
 
 impl TcpStream {
+    /// # Errors
     #[instrument(skip_all)]
     pub async fn connect(
         reactor: Reactor,
@@ -159,7 +162,7 @@ impl TcpStream {
         socket.start_connect(&network, socket_address)?;
 
         let subscription = socket.subscribe();
-        trace!("socket subscription {subscription:?}");
+        trace!("connect socket subscription {subscription:?}");
         reactor.wait_for(subscription).await;
 
         let (input_stream, output_stream) = socket.finish_connect()?;
@@ -172,6 +175,7 @@ impl TcpStream {
         })))
     }
 
+    /// # Panics
     pub fn into_split(mut self) -> (OwnedReadHalf, OwnedWriteHalf) {
         let TcpStreamInner {
             socket,
@@ -194,6 +198,7 @@ impl TcpStream {
         (read, write)
     }
 
+    /// # Panics
     pub fn split(&mut self) -> (ReadHalf<'_>, WriteHalf<'_>) {
         let this = self.0.as_mut().unwrap();
 
@@ -209,6 +214,9 @@ impl TcpStream {
         (read, write)
     }
 
+    /// # Errors
+    /// # Panics
+    #[expect(clippy::unused_async_trait_impl, clippy::unused_async)]
     pub async fn close(self) -> Result<(), ErrorCode> {
         if let Some(TcpStreamInner { socket, .. }) = &self.0 {
             socket.shutdown(ShutdownType::Both)
@@ -231,7 +239,7 @@ pub struct ReadHalf<'a> {
     input_stream: &'a mut InputStream,
 }
 
-impl<'a> AsyncRead for ReadHalf<'a> {
+impl AsyncRead for ReadHalf<'_> {
     #[instrument(skip_all)]
     async fn read(&mut self, len: u64) -> Result<Vec<u8>, StreamError> {
         loop {
@@ -258,8 +266,9 @@ pub struct WriteHalf<'a> {
     output_stream: &'a mut OutputStream,
 }
 
-impl<'a> AsyncWrite for WriteHalf<'a> {
+impl AsyncWrite for WriteHalf<'_> {
     #[instrument(skip_all)]
+    #[expect(clippy::cast_possible_truncation)]
     async fn write(&mut self, data: &[u8]) -> Result<u64, StreamError> {
         if data.is_empty() {
             return Ok(0);
@@ -294,13 +303,16 @@ impl<'a> AsyncWrite for WriteHalf<'a> {
         Ok(())
     }
 
+    #[expect(clippy::unused_async_trait_impl)]
     async fn close(&mut self) -> Result<(), StreamError> {
         self.socket.shutdown(ShutdownType::Send).ok(); // TODO
         Ok(())
     }
 }
 
-impl<'a> WriteHalf<'a> {
+impl WriteHalf<'_> {
+    /// # Errors
+    /// # Panics
     #[instrument(skip_all)]
     pub async fn splice(&mut self, read: &mut ReadHalf<'_>, len: u64) -> Result<u64, StreamError> {
         if len == 0 {
@@ -372,6 +384,7 @@ impl Drop for OwnedWriteHalf {
 
 impl AsyncWrite for OwnedWriteHalf {
     #[instrument(skip_all)]
+    #[expect(clippy::cast_possible_truncation)]
     async fn write(&mut self, data: &[u8]) -> Result<u64, StreamError> {
         let len = loop {
             let len = self.output_stream.check_write()?;
@@ -401,6 +414,7 @@ impl AsyncWrite for OwnedWriteHalf {
         Ok(())
     }
 
+    #[expect(clippy::unused_async_trait_impl)]
     async fn close(&mut self) -> Result<(), StreamError> {
         self.socket.shutdown(ShutdownType::Send).ok(); // TODO
         Ok(())
@@ -408,6 +422,8 @@ impl AsyncWrite for OwnedWriteHalf {
 }
 
 impl OwnedWriteHalf {
+    /// # Errors
+    /// # Panics
     #[instrument(skip_all)]
     pub async fn splice(&mut self, read: &mut OwnedReadHalf, len: u64) -> Result<u64, StreamError> {
         if len == 0 {

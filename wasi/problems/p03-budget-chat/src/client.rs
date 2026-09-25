@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use bytes::{BufMut, BytesMut};
 
-use futures::{channel::mpsc, stream::FusedStream, Sink, SinkExt, Stream, StreamExt, TryStreamExt};
+use futures::{channel::mpsc, stream::FusedStream, Sink, SinkExt, Stream, StreamExt, TryStreamExt, FutureExt};
 
 use tracing::{debug, error, info, instrument, trace};
 
@@ -136,10 +136,14 @@ where
 {
     #[instrument(skip(self))]
     async fn chatting(mut self) -> Result<(), Error> {
+        debug!("state: chatting");
+        
+        let mut client = self.client.next().fuse();
+        let mut read = self.read.next().fuse();
         loop {
-            trace!("state: main loop");
-            futures::select_biased! {
-                message = self.client.next() => {
+            trace!("chatting: main loop");
+            match futures::future::select(client, read).await {
+                futures::future::Either::Left((message, current_read)) => {
                     trace!("got server message: {message:?}");
                     match message {
                         Some(ServerMessage::AnnounceUser(user)) => {
@@ -160,9 +164,11 @@ where
                         None => break,
                         message => unreachable!("invalid server message {:?}", message),
                     }
-                }
 
-                segment = self.read.next() => {
+                    client = self.client.next().fuse();
+                    read = current_read;
+                }
+                futures::future::Either::Right((segment, current_client)) => {
                     trace!("got client message: {segment:?}");
                     match segment {
                         Some(Ok(message)) => {
@@ -170,6 +176,9 @@ where
                         }
                         _ => break,
                     }
+
+                    client = current_client;
+                    read = self.read.next().fuse();
                 }
             }
         }

@@ -9,6 +9,7 @@ pub use udp::UdpSocket;
 pub struct LocalSocketAddress(u16);
 
 impl LocalSocketAddress {
+    #[must_use]
     pub fn port(&self) -> u16 {
         self.0
     }
@@ -47,6 +48,7 @@ pub(crate) mod sealed {
     }
 
     impl ToSocketAddrs for IpSocketAddress {
+        #[allow(clippy::unused_async_trait_impl)]
         async fn to_socket_addr(
             &self,
             _: &Reactor,

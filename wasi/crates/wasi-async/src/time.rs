@@ -23,7 +23,10 @@ impl fmt::Display for Elapsed {
     }
 }
 
+/// # Errors
+/// # Panics
 #[instrument(skip_all)]
+#[allow(clippy::cast_possible_truncation)]
 pub async fn timeout<F: Future>(
     reactor: Reactor,
     duration: Duration,
@@ -31,7 +34,7 @@ pub async fn timeout<F: Future>(
 ) -> Result<F::Output, Elapsed> {
     let subscription = monotonic_clock::subscribe_duration(duration.as_nanos() as u64);
     trace!("subscribe duration {subscription:?}");
-    let wait_for = reactor.wait_for(subscription).map(|_| Err(Elapsed));
+    let wait_for = reactor.wait_for(subscription).map(|()| Err(Elapsed));
 
     let future = future.map(Ok);
 
@@ -43,6 +46,7 @@ pub async fn timeout<F: Future>(
 pub struct Instant(u64);
 
 impl Instant {
+    #[must_use]
     pub fn now() -> Self {
         Self(monotonic_clock::now())
     }
@@ -51,19 +55,23 @@ impl Instant {
 impl ops::Add<Duration> for Instant {
     type Output = Instant;
 
+    #[allow(clippy::cast_possible_truncation)]
     fn add(self, duration: Duration) -> Self::Output {
         Self(self.0 + duration.as_nanos() as u64)
     }
 }
 
 impl ops::AddAssign<Duration> for Instant {
+    #[allow(clippy::cast_possible_truncation)]
     fn add_assign(&mut self, duration: Duration) {
         self.0 += duration.as_nanos() as u64;
     }
 }
 
+/// # Panics
+#[must_use]
 pub fn interval_at(reactor: Reactor, start: Instant, period: Duration) -> Interval {
-    assert!(period != Duration::from_nanos(0));
+    assert_ne!(period, Duration::from_nanos(0));
     Interval {
         reactor,
         current: start,
@@ -78,6 +86,7 @@ pub struct Interval {
 }
 
 impl Interval {
+    #[must_use]
     pub fn period(&self) -> Duration {
         self.period
     }

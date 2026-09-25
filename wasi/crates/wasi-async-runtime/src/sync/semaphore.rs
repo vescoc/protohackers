@@ -17,6 +17,7 @@ pub struct Semaphore {
 }
 
 impl Semaphore {
+    #[must_use]
     pub fn new(permits: usize) -> Self {
         Self {
             inner: RefCell::new(SemaphoreInner {

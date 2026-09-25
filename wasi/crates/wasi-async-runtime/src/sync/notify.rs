@@ -15,6 +15,7 @@ pub struct Notify {
 }
 
 impl Notify {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             inner: RefCell::new(NotifyInner {

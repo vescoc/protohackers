@@ -37,6 +37,8 @@ enum UdpSocketInner {
 }
 
 impl UdpSocket {
+    /// # Errors
+    /// # Panics
     #[instrument(skip_all)]
     pub async fn bind(
         reactor: Reactor,
@@ -74,6 +76,8 @@ impl UdpSocket {
         })
     }
 
+    /// # Errors
+    /// # Panics
     #[instrument(skip_all)]
     pub async fn connect(&self, address: impl ToSocketAddrs) -> Result<(), network::ErrorCode> {
         let socket_address = address.to_socket_addr(&self.reactor, &self.network).await?;
@@ -92,6 +96,8 @@ impl UdpSocket {
         Ok(())
     }
 
+    /// # Errors
+    /// # Panics
     pub fn local_addr(&self) -> Result<LocalSocketAddress, network::ErrorCode> {
         match self.socket.local_address()? {
             IpSocketAddress::Ipv4(Ipv4SocketAddress { port, .. })
@@ -99,37 +105,38 @@ impl UdpSocket {
         }
     }
 
+    /// # Errors
+    /// # Panics
     #[instrument(skip_all)]
     pub async fn send(&self, data: Vec<u8>) -> Result<usize, network::ErrorCode> {
         trace!("send {}", data.len());
-        match &*self.inner.read().await {
-            UdpSocketInner::Connect {
-                outgoing_datagram_stream,
-                ..
-            } => {
-                while outgoing_datagram_stream.check_send()? == 0 {
-                    self.reactor
-                        .wait_for(outgoing_datagram_stream.subscribe())
-                        .await;
-                }
-                let len = data.len();
-                if outgoing_datagram_stream.send(&[OutgoingDatagram {
-                    data,
-                    remote_address: None,
-                }])? == 0
-                {
-                    warn!("???");
-                    return Err(network::ErrorCode::InvalidState);
-                }
-                Ok(len)
+        if let UdpSocketInner::Connect {
+            outgoing_datagram_stream,
+            ..
+        } = &*self.inner.read().await {
+            while outgoing_datagram_stream.check_send()? == 0 {
+                self.reactor
+                    .wait_for(outgoing_datagram_stream.subscribe())
+                    .await;
             }
-            _ => {
-                warn!("invalid state");
+            let len = data.len();
+            if outgoing_datagram_stream.send(&[OutgoingDatagram {
+                data,
+                remote_address: None,
+            }])? == 0
+            {
+                warn!("???");
                 return Err(network::ErrorCode::InvalidState);
             }
+            Ok(len)
+        } else {
+            warn!("invalid state");
+            return Err(network::ErrorCode::InvalidState);
         }
     }
 
+    /// # Errors
+    /// # Panics
     #[instrument(skip_all)]
     pub async fn send_to(
         &self,
@@ -162,13 +169,15 @@ impl UdpSocket {
                 }
                 Ok(len)
             }
-            _ => {
+            UdpSocketInner::Uninitialized => {
                 warn!("invalid state");
                 return Err(network::ErrorCode::InvalidState);
             }
         }
     }
 
+    /// # Errors
+    /// # Panics
     #[instrument(skip_all)]
     pub async fn recv(&self) -> Result<Vec<u8>, network::ErrorCode> {
         match &*self.inner.read().await {
@@ -186,20 +195,22 @@ impl UdpSocket {
                         incoming_datagram_stream.receive(1)?.pop()
                     {
                         return Ok(data);
-                    } else {
-                        self.reactor
-                            .wait_for(incoming_datagram_stream.subscribe())
-                            .await;
                     }
+                    
+                    self.reactor
+                        .wait_for(incoming_datagram_stream.subscribe())
+                        .await;
                 }
             }
-            _ => {
+            UdpSocketInner::Uninitialized => {
                 warn!("invalid state");
                 return Err(network::ErrorCode::InvalidState);
             }
         }
     }
 
+    /// # Errors
+    /// # Panics
     #[instrument(skip_all)]
     pub async fn recv_from(&self) -> Result<(Vec<u8>, IpSocketAddress), network::ErrorCode> {
         match &*self.inner.read().await {
@@ -217,13 +228,13 @@ impl UdpSocket {
                 }) = incoming_datagram_stream.receive(1)?.pop()
                 {
                     return Ok((data, remote_address));
-                } else {
-                    self.reactor
-                        .wait_for(incoming_datagram_stream.subscribe())
-                        .await;
                 }
+
+                self.reactor
+                    .wait_for(incoming_datagram_stream.subscribe())
+                    .await;
             },
-            _ => {
+            UdpSocketInner::Uninitialized => {
                 warn!("invalid state");
                 return Err(network::ErrorCode::InvalidState);
             }

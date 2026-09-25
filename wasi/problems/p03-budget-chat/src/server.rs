@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use futures::{channel::mpsc, StreamExt};
+use futures::{channel::mpsc, StreamExt, FutureExt};
 
 use tracing::{debug, instrument, trace, warn};
 
@@ -51,11 +51,14 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
     let mut clients = HashMap::new();
     let (server_sender, mut receiver) = mpsc::unbounded();
 
-    let mut incoming_clients = listener.into_stream().fuse();
+    let mut incoming_clients = std::pin::pin!(listener.into_stream().fuse());
+    
+    let mut receiver_message = receiver.next().fuse();
+    let mut next_client = incoming_clients.next().fuse();
     loop {
         trace!("main loop");
-        futures::select_biased! {
-            client_message = receiver.next() => {
+        match futures::future::select(receiver_message, next_client).await {
+            futures::future::Either::Left((client_message, current_next_client)) => {
                 trace!("client message: {client_message:?}");
 
                 // Panic: nobody closes this channel, unwrap ok
@@ -111,9 +114,11 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
                         }
                     }
                 }
-            }
 
-            client = incoming_clients.next() => {
+                receiver_message = receiver.next().fuse();
+                next_client = current_next_client;
+            }
+            futures::future::Either::Right((client, current_receiver_message)) => {
                 let Some(Ok((socket, remote_address))) = client else { break Ok(()) };
 
                 debug!("new client: {remote_address:?}");
@@ -132,6 +137,9 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
                                    sender,
                                    username: None,
                                });
+
+                receiver_message = current_receiver_message;
+                next_client = incoming_clients.next().fuse();
             }
         }
     }

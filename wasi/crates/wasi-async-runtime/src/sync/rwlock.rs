@@ -7,16 +7,11 @@ use crate::sync::notify::Notify;
 use crate::sync::semaphore::{Semaphore, SemaphorePermit};
 
 #[derive(Debug)]
-struct RwLockInner<T> {
-    readers: usize,
-    value: T,
-}
-
-#[derive(Debug)]
 pub struct RwLock<T> {
     lock: Semaphore,
     notify_writers: Notify,
-    inner: UnsafeCell<RwLockInner<T>>,
+    readers: UnsafeCell<usize>,
+    value: UnsafeCell<T>,
 }
 
 impl<T> RwLock<T> {
@@ -27,7 +22,8 @@ impl<T> RwLock<T> {
         Self {
             lock: Semaphore::new(1),
             notify_writers,
-            inner: UnsafeCell::new(RwLockInner { readers: 0, value }),
+            readers: UnsafeCell::new(0),
+            value: UnsafeCell::new(value),
         }
     }
 
@@ -36,17 +32,17 @@ impl<T> RwLock<T> {
         trace!("write");
         let permit = self.lock.acquire().await;
 
-        if unsafe { &*self.inner.get() }.readers > 0 {
+        if unsafe { *self.readers.get() } > 0 {
             trace!("waiting notified");
             self.notify_writers.notified().await;
         }
 
-        debug_assert_eq!(unsafe { &*self.inner.get() }.readers, 0);
+        debug_assert_eq!(unsafe { *self.readers.get() }, 0);
 
         trace!("ok");
         RwLockWriteGuard {
             _permit: permit,
-            value: &mut unsafe { &mut *self.inner.get() }.value,
+            value: &self.value,
         }
     }
 
@@ -56,16 +52,16 @@ impl<T> RwLock<T> {
         
         let permit = self.lock.try_acquire()?;
 
-        if unsafe { &*self.inner.get() }.readers > 0 {
+        if unsafe { *self.readers.get() } > 0 {
             return None;
         }
 
-        debug_assert_eq!(unsafe { &*self.inner.get() }.readers, 0);
+        debug_assert_eq!(unsafe { *self.readers.get() }, 0);
 
         trace!("ok");
         Some(RwLockWriteGuard {
             _permit: permit,
-            value: &mut unsafe { &mut *self.inner.get() }.value,
+            value: &self.value,
         })
     }
 
@@ -74,13 +70,13 @@ impl<T> RwLock<T> {
         trace!("read");
         let _ = self.lock.acquire().await;
 
-        let readers = &mut unsafe { &mut *self.inner.get() }.readers;
+        let readers = unsafe { &mut *self.readers.get() };
         *readers += 1;
 
         RwLockReadGuard {
-            value: &unsafe { &*self.inner.get() }.value,
+            value: &self.value,
             notify_writers: &self.notify_writers,
-            readers,
+            readers: &self.readers,
         }
     }
     
@@ -89,13 +85,13 @@ impl<T> RwLock<T> {
         trace!("try_read");
         let _ = self.lock.try_acquire()?;
 
-        let readers = &mut unsafe { &mut *self.inner.get() }.readers;
+        let readers = unsafe { &mut *self.readers.get() };
         *readers += 1;
 
         Some(RwLockReadGuard {
-            value: &unsafe { &*self.inner.get() }.value,
+            value: &self.value,
             notify_writers: &self.notify_writers,
-            readers,
+            readers: &self.readers,
         })
     }
 }
@@ -103,42 +99,42 @@ impl<T> RwLock<T> {
 #[derive(Debug)]
 pub struct RwLockWriteGuard<'a, T> {
     _permit: SemaphorePermit<'a>,
-    value: &'a mut T,
+    value: &'a UnsafeCell<T>,
 }
 
 impl<T> Deref for RwLockWriteGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.value
+        unsafe { &*self.value.get() }
     }
 }
 
 impl<T> DerefMut for RwLockWriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.value
+        unsafe { &mut *self.value.get() }
     }
 }
 
 #[derive(Debug)]
 pub struct RwLockReadGuard<'a, T> {
-    value: &'a T,
+    value: &'a UnsafeCell<T>,
     notify_writers: &'a Notify,
-    readers: &'a mut usize,
+    readers: &'a UnsafeCell<usize>,
 }
 
 impl<T> Deref for RwLockReadGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.value
+        unsafe { &*self.value.get() }
     }
 }
 
 impl<T> Drop for RwLockReadGuard<'_, T> {
     fn drop(&mut self) {
-        *self.readers -= 1;
-        if *self.readers == 0 {
+        *(unsafe { &mut *self.readers.get() }) -= 1;
+        if unsafe { *self.readers.get() } == 0 {
             self.notify_writers.notify_one();
         }
     }

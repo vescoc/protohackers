@@ -26,12 +26,12 @@ pub(crate) fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
         ///
         /// Only valid for single thread environment
         unsafe fn clone(ptr: *const ()) -> RawWaker { unsafe {
-            let ptr = ptr as *const RefCell<bool>;
+            let ptr = ptr.cast::<RefCell<bool>>();
 
             // increment the strong counter for the current data
             Rc::increment_strong_count(ptr);
             
-            RawWaker::new(ptr as _, &VTABLE)
+            RawWaker::new(ptr.cast(), &VTABLE)
         }}
 
         /// Wake the task
@@ -43,10 +43,10 @@ pub(crate) fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
         /// Only valid for single thread environment
         unsafe fn wake(ptr: *const ()) { unsafe {
             // Recover the original [`Rc`] pointer
-            let state = Rc::from_raw(ptr as *const RefCell<bool>);
+            let state = Rc::from_raw(ptr.cast::<RefCell<bool>>());
             if let Ok(state) = state.try_borrow_mut().as_mut() {
                 **state = true;
-            };
+            }
         }}
 
         /// Wake the task by reference
@@ -57,11 +57,11 @@ pub(crate) fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
         ///
         /// Only valid for single thread environment
         unsafe fn wake_by_ref(ptr: *const ()) { unsafe {
-            let ptr = ptr as *const RefCell<bool>;
+            let ptr = ptr.cast::<RefCell<bool>>();
             let state = ptr.as_ref_unchecked();
             if let Ok(state) = state.try_borrow_mut().as_mut() {
                 **state = true;
-            };
+            }
         }}
 
         /// Wake the task
@@ -74,13 +74,13 @@ pub(crate) fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
         unsafe fn drop(ptr: *const ()) { unsafe {
             // Recover the original [`Rc`] pointer
             // and let Rust to drop it as normal
-            let _ = Rc::from_raw(ptr as *const RefCell<bool>);
+            let _ = Rc::from_raw(ptr.cast::<RefCell<bool>>());
         }}
 
         RawWakerVTable::new(clone, wake, wake_by_ref, drop)
     };
 
-    let raw = RawWaker::new(Rc::into_raw(state) as _, &VTABLE);
+    let raw = RawWaker::new(Rc::into_raw(state).cast(), &VTABLE);
 
     // SAFETY: the above assumptions are valid
     unsafe { Waker::from_raw(raw) }
@@ -142,7 +142,7 @@ impl<'a, P> WaitFor<'a, P> {
     }
 }
 
-impl<'a> Future for WaitFor<'a, Pollable> {
+impl Future for WaitFor<'_, Pollable> {
     type Output = ();
 
     #[instrument(skip_all)]
@@ -153,7 +153,7 @@ impl<'a> Future for WaitFor<'a, Pollable> {
         let key = this.key.get_or_insert_with(|| reactor.poller.insert(this.pollable.take().expect("Invalid state: multi-thread env?")));
         reactor.wakers.insert(*key, cx.waker().clone());
 
-        if reactor.poller.get(key).unwrap().ready() {
+        if reactor.poller.get(*key).unwrap().ready() {
             trace!("{key:?} is ready");
             reactor.poller.remove(*key);
             reactor.wakers.remove(key);
@@ -165,7 +165,7 @@ impl<'a> Future for WaitFor<'a, Pollable> {
     }
 }
 
-impl<'a, P> Drop for WaitFor<'a, P> {
+impl<P> Drop for WaitFor<'_, P> {
     #[instrument(skip_all)]
     fn drop(&mut self) {
         if let Some(key) = self.key {
@@ -195,28 +195,6 @@ impl Reactor {
         )
     }
 
-    // #[instrument(skip_all)]
-    // pub async fn wait_for<P: Into<Pollable>>(&self, pollable: P) {
-    //     let mut pollable = Some(pollable.into());
-    //     let mut key = None;
-
-    //     future::poll_fn(|cx| {
-    //         let mut reactor = self.inner.borrow_mut();
-
-    //         let key = key.get_or_insert_with(|| reactor.poller.insert(pollable.take().unwrap()));
-    //         reactor.wakers.insert(*key, cx.waker().clone());
-
-    //         if reactor.poller.get(key).unwrap().ready() {
-    //             trace!("{key:?} is ready");
-    //             reactor.poller.remove(*key);
-    //             reactor.wakers.remove(key);
-    //             Poll::Ready(())
-    //         } else {
-    //             Poll::Pending
-    //         }
-    //     })
-    //     .await;
-    // }
     #[instrument(skip_all)]
     pub fn wait_for<P: Into<Pollable>>(&self, pollable: P) -> WaitFor<'_, Pollable> {
         WaitFor::new(self, pollable.into())
@@ -264,7 +242,7 @@ impl Reactor {
                 .count();
 
             trace!(
-                "pending {:?} ready: {ready}",
+                "pending {:?} ready count: {ready}",
                 pending
                     .iter()
                     .map(|(task_id, ..)| task_id)

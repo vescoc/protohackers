@@ -16,8 +16,10 @@ pub trait Decoder {
     type Item;
     type Error: From<StreamError>;
 
+    /// # Errors
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error>;
 
+    /// # Errors
     fn decode_eof(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         match self.decode(src) {
             Ok(Some(value)) => Ok(Some(value)),
@@ -30,6 +32,7 @@ pub trait Decoder {
 pub trait Encoder<Item> {
     type Error: From<StreamError>;
 
+    /// # Errors
     fn encode(&mut self, item: Item, dst: &mut BytesMut) -> Result<(), Self::Error>;
 }
 
@@ -48,6 +51,8 @@ impl<R, D> FramedRead<R, D> {
 }
 
 impl<R: AsyncRead + Unpin, D: Decoder + Unpin> FramedRead<R, D> {
+    /// # Errors
+    /// # Panics
     #[instrument(skip_all)]
     pub fn into_stream(self) -> impl Stream<Item = Result<D::Item, D::Error>> {
         stream::unfold(
@@ -135,7 +140,10 @@ impl<W, Item, E> FramedWrite<W, Item, E> {
 }
 
 impl<W: AsyncWrite + Unpin, E: Encoder<Item> + Unpin, Item> FramedWrite<W, Item, E> {
+    /// # Errors
+    /// # Panics
     #[instrument(skip_all)]
+    #[expect(clippy::cast_possible_truncation, reason = "can happen")]
     pub fn into_sink(self) -> impl Sink<Item, Error = E::Error> {
         sink::unfold(
             (self.write, self.encoder, BytesMut::with_capacity(INITIAL_CAPACITY)),
@@ -164,6 +172,7 @@ pub struct LinesDecoder {
 }
 
 impl LinesDecoder {
+    #[must_use]
     pub fn new() -> Self {
         Self { from_index: 0 }
     }
@@ -207,6 +216,7 @@ impl Decoder for LinesDecoder {
 pub struct ChunksDecoder<const SIZE: usize>;
 
 impl<const SIZE: usize> ChunksDecoder<SIZE> {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
