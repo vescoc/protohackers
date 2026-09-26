@@ -114,7 +114,7 @@ pub struct Reactor {
 type TaskInfo = (
     usize,
     Rc<RefCell<bool>>,
-    Pin<Box<dyn Future<Output = ()> + 'static>>,
+    Pin<Box<dyn Future<Output = ()>>>,
 );
 
 struct InnerReactor {
@@ -208,6 +208,8 @@ impl Reactor {
             mem::take(&mut reactor.tasks)
         };
 
+        trace!("tasks len: {}", tasks.len());
+        
         let mut complete = HashSet::new();
         let mut pending = loop {
             let mut pending = vec![];
@@ -229,6 +231,7 @@ impl Reactor {
                 let waker = task_waker(state.clone());
                 let mut cx = Context::from_waker(&waker);
 
+                trace!("poll task id {task_id}");
                 if task.as_mut().poll(&mut cx).is_pending() {
                     pending.push((task_id, state, task));
                 } else {
@@ -236,13 +239,24 @@ impl Reactor {
                 }
             }
 
+            let mut new_tasks = {
+                let mut reactor = self.inner.borrow_mut();
+
+                mem::take(&mut reactor.tasks)
+            };
+
+            // check if new tasks are alls pollable
+            assert!(new_tasks.iter().all(|(_, state, _)| *state.borrow()), "new tasks in false state");
+
+            pending.append(&mut new_tasks);            
+
             let ready = pending
                 .iter()
                 .filter(|(_, state, _)| *state.borrow())
                 .count();
 
             trace!(
-                "pending {:?} ready count: {ready}",
+                "pending tasks {:?} complete {complete:?} ready count: {ready}",
                 pending
                     .iter()
                     .map(|(task_id, ..)| task_id)

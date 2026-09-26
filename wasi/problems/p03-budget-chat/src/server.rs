@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use futures::{channel::mpsc, StreamExt, FutureExt};
 
-use tracing::{debug, instrument, trace, warn};
+use tracing::{debug, instrument, warn};
 
 use wasi_async::net::TcpListener;
 
@@ -56,10 +56,10 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
     let mut receiver_message = receiver.next().fuse();
     let mut next_client = incoming_clients.next().fuse();
     loop {
-        trace!("main loop");
+        debug!("main loop");
         match futures::future::select(receiver_message, next_client).await {
             futures::future::Either::Left((client_message, current_next_client)) => {
-                trace!("client message: {client_message:?}");
+                debug!("client message: {client_message:?}");
 
                 // Panic: nobody closes this channel, unwrap ok
                 match client_message.expect("invalid state") {
@@ -127,7 +127,7 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
 
                 let (sender, receiver) = mpsc::unbounded();
 
-                reactor.clone().spawn(handle_client(id, socket, server_sender.clone(), receiver));
+                reactor.spawn(handle_client(id, socket, server_sender.clone(), receiver));
 
                 sender.unbounded_send(ServerMessage::Welcome).ok();
 

@@ -363,7 +363,7 @@ impl AsyncRead for OwnedReadHalf {
             self.reactor.wait_for(subscription).await;
 
             let data = self.input_stream.read(len)?;
-            if data.is_empty() || len == 0 {
+            if !data.is_empty() || len == 0 {
                 return Ok(data);
             }
         }
@@ -386,6 +386,10 @@ impl AsyncWrite for OwnedWriteHalf {
     #[instrument(skip_all)]
     #[expect(clippy::cast_possible_truncation)]
     async fn write(&mut self, data: &[u8]) -> Result<u64, StreamError> {
+        if data.is_empty() {
+            return Ok(0);
+        }
+
         let len = loop {
             let len = self.output_stream.check_write()?;
             if len > 0 {

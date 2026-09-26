@@ -54,13 +54,13 @@ impl Poller {
             }
         }
 
-        trace!("start poll {targets:?}");
+        trace!("start poll targets {targets:?} indexes {indexes:?}");
         let ready_indexes = if targets.is_empty() {
             vec![]
         } else {
             poll(&targets)
         };
-        trace!("done poll {ready_indexes:?}");
+        trace!("done poll ready indexes {ready_indexes:?}");
 
         ready_indexes
             .into_iter()

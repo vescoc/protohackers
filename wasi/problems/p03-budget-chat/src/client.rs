@@ -6,7 +6,7 @@ use bytes::{BufMut, BytesMut};
 
 use futures::{channel::mpsc, stream::FusedStream, Sink, SinkExt, Stream, StreamExt, TryStreamExt, FutureExt};
 
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, error, info, instrument};
 
 use wasi::io::streams::StreamError;
 
@@ -141,10 +141,10 @@ where
         let mut client = self.client.next().fuse();
         let mut read = self.read.next().fuse();
         loop {
-            trace!("chatting: main loop");
+            debug!("chatting: main loop");
             match futures::future::select(client, read).await {
                 futures::future::Either::Left((message, current_read)) => {
-                    trace!("got server message: {message:?}");
+                    debug!("got server message: {message:?}");
                     match message {
                         Some(ServerMessage::AnnounceUser(user)) => {
                             let mut message = String::new();
@@ -169,7 +169,7 @@ where
                     read = current_read;
                 }
                 futures::future::Either::Right((segment, current_client)) => {
-                    trace!("got client message: {segment:?}");
+                    debug!("got client message: {segment:?}");
                     match segment {
                         Some(Ok(message)) => {
                             self.server.unbounded_send(ClientMessage::Message(self.id, Arc::new(message))).unwrap();
@@ -272,6 +272,8 @@ impl Encoder<String> for LinesEncoder {
     type Error = StreamError;
 
     fn encode(&mut self, line: String, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        debug!("encode line: {line}");
+        
         dst.extend_from_slice(line.as_bytes());
         dst.put_u8(b'\n');
         Ok(())

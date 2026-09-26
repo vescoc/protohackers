@@ -6,7 +6,7 @@ use clap::Parser;
 
 use tracing::info;
 
-use p05_mob_in_the_middle::{run, BOGUSCOIN};
+use p05_mob_in_the_middle::{BOGUSCOIN, run};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about, long_about = None)]

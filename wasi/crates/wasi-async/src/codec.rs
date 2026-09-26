@@ -77,7 +77,7 @@ impl<R: AsyncRead + Unpin, D: Decoder + Unpin> FramedRead<R, D> {
 
                     let len = buffer.capacity().max(1) as u64;
                     let (data, current_eof) = {
-                        trace!("read {len}/{}", buffer.len());
+                        trace!("decode read {len}/{}", buffer.len());
                         match reader.read(len).await {
                             Ok(data) => (Some(data), false),
                             Err(StreamError::Closed) => (None, true),
@@ -92,7 +92,7 @@ impl<R: AsyncRead + Unpin, D: Decoder + Unpin> FramedRead<R, D> {
 
                     let data = data.unwrap();
 
-                    trace!("extend slice {}", data.len());
+                    trace!("decode extend slice {}", data.len());
                     buffer.extend_from_slice(&data);
                 }
             },
@@ -150,8 +150,6 @@ impl<W: AsyncWrite + Unpin, E: Encoder<Item> + Unpin, Item> FramedWrite<W, Item,
             |(mut writer, mut encoder, mut buffer), item| async move {
                 encoder.encode(item, &mut buffer)?;
                 
-                assert!(!buffer.is_empty());
-                
                 while !buffer.is_empty() {
                     let n = writer.write(&buffer).await?;
                     trace!("sent {n} bytes");
@@ -191,7 +189,7 @@ impl Decoder for LinesDecoder {
     #[instrument]
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         if let Some(index) = src.iter().skip(self.from_index).position(|v| *v == b'\n') {
-            trace!("found new line at {index}");
+            trace!("decode found new line at {index}");
 
             let line = src.split_to(self.from_index + index + 1);
 
@@ -205,7 +203,7 @@ impl Decoder for LinesDecoder {
             self.from_index = src.len();
             src.reserve(1);
 
-            trace!("searching");
+            trace!("decode searching");
 
             Ok(None)
         }
