@@ -16,12 +16,9 @@ pub struct RwLock<T> {
 
 impl<T> RwLock<T> {
     pub fn new(value: T) -> Self {
-        let notify_writers = Notify::new();
-        notify_writers.notify_one();
-
         Self {
             lock: Semaphore::new(1),
-            notify_writers,
+            notify_writers: Notify::new(),
             readers: UnsafeCell::new(0),
             value: UnsafeCell::new(value),
         }
@@ -32,7 +29,7 @@ impl<T> RwLock<T> {
         trace!("write");
         let permit = self.lock.acquire().await;
 
-        if unsafe { *self.readers.get() } > 0 {
+        while unsafe { *self.readers.get() } > 0 {
             trace!("waiting notified");
             self.notify_writers.notified().await;
         }
@@ -151,6 +148,20 @@ mod tests {
 
     use super::*;
 
+    async fn yield_now() {
+        let mut yielded = false;
+        std::future::poll_fn(move |cx| {
+            if yielded {
+                std::task::Poll::Ready(())
+            } else {
+                yielded = true;
+                cx.waker().wake_by_ref();
+                std::task::Poll::Pending
+            }
+        })
+            .await;
+    }
+    
     fn init_tracing_subscriber() {
         static INIT_TRACING_SUBSCRIBER: Once = Once::new();
         INIT_TRACING_SUBSCRIBER.call_once(tracing_subscriber::fmt::init);
@@ -226,6 +237,80 @@ mod tests {
             assert!(lock.try_write().is_none());
         }
     }    
+
+    #[test]
+    fn test_rw_lock_writer_during_active_reader() {
+        init_tracing_subscriber();
+
+        block_on(|reactor| async move {
+            let rw = Rc::new(RwLock::new(0));
+
+            // spawn order matters: reactor.tasks is popped LIFO, so pushing
+            // the writer first means the reader gets polled first within the
+            // same round.
+            let writer = {
+                let rw = rw.clone();
+                reactor.spawn(async move {
+                    trace!("writer: about to write()");
+                    let mut guard = rw.write().await;
+                    trace!("writer: got guard, value = {}", *guard);
+                    *guard += 100;
+                })
+            };
+
+            let reader = {
+                let rw = rw.clone();
+                reactor.spawn(async move {
+                    trace!("reader: about to read()");
+                    let guard = rw.read().await;
+                    trace!("reader: got guard, yielding while holding it");
+                    yield_now().await;
+                    trace!("reader: done yielding, value = {}", *guard);
+                })
+            };
+
+            (reader, writer).join().await;
+
+            assert_eq!(*rw.read().await, 100);
+        });
+    }
+
+    #[test]
+    fn test_rw_lock_writer_2() {
+        init_tracing_subscriber();
+
+        block_on(|reactor| async move {
+            let rw = Rc::new(RwLock::new(0));
+
+            let writer1 = {
+                let rw = rw.clone();
+                reactor.spawn(async move {
+                    trace!("writer1: about to write()");
+                    let mut guard = rw.write().await;
+                    trace!("writer1: got guard, value = {}", *guard);
+                    yield_now().await;
+                    trace!("writer1: re-got guard, value = {}", *guard);
+                    *guard += 100;
+                })
+            };
+
+            let writer2 = {
+                let rw = rw.clone();
+                reactor.spawn(async move {
+                    trace!("writer2: about to write()");
+                    let mut guard = rw.write().await;
+                    trace!("writer2: got guard, value = {}", *guard);
+                    yield_now().await;
+                    trace!("writer2: re-got guard, value = {}", *guard);
+                    *guard += 50;
+                })
+            };
+
+            (writer1, writer2).join().await;
+
+            assert_eq!(*rw.read().await, 150);
+        });
+    }
     
     #[test]
     fn test_rw_lock() {
