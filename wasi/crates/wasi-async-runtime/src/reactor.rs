@@ -123,7 +123,7 @@ struct InnerReactor {
     poller: Poller,
     wakers: HashMap<EventKey, Waker>,
     tasks: Vec<TaskInfo>,
-    complete: HashMap<usize, Option<Waker>>,
+    complete: HashMap<usize, (bool, Option<Waker>)>,
 }
 
 pub struct WaitFor<'a, P> {
@@ -273,12 +273,11 @@ impl Reactor {
         let mut reactor = self.inner.borrow_mut();
         reactor.tasks.append(&mut pending);
         for task_id in complete {
-            if let Some(waker) = reactor.complete.get_mut(&task_id) {
-                if let Some(waker) = waker.take() {
+            if let Some((complete, waker)) = reactor.complete.get_mut(&task_id) {
+                *complete = true;
+                if let Some(waker) = waker {
                     waker.wake_by_ref();
                 }
-            } else {
-                reactor.complete.insert(task_id, None);
             }
         }
 
@@ -301,20 +300,22 @@ impl Reactor {
     }
 
     pub fn spawn(&self, f: impl Future<Output = ()> + 'static) -> JoinHandle {
-        let mut reactor = self.inner.borrow_mut();
+        let task_id = {
+            // limit borrow mut span
+            let mut reactor = self.inner.borrow_mut();
 
-        let task_id = reactor.next_id;
+            let task_id = reactor.next_id;
 
-        reactor.next_id += 1;
+            reactor.next_id += 1;
 
-        reactor
-            .tasks
-            .push((task_id, Rc::new(RefCell::new(true)), Box::pin(f)));
+            reactor
+                .tasks
+                .push((task_id, Rc::new(RefCell::new(true)), Box::pin(f)));
 
-        JoinHandle {
-            reactor: self.clone(),
-            task_id,
-        }
+            task_id
+        };
+        
+        JoinHandle::new(self.clone(), task_id)
     }
 }
 
@@ -323,20 +324,36 @@ pub struct JoinHandle {
     task_id: usize,
 }
 
+impl JoinHandle {
+    fn new(reactor: Reactor, task_id: usize) -> Self {
+        reactor.inner.borrow_mut().complete.insert(task_id, (false, None));
+        
+        Self {
+            reactor,
+            task_id,
+        }
+    }
+}
+
 impl Future for JoinHandle {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = self.get_mut();
         let mut reactor = this.reactor.inner.borrow_mut();
-        if reactor.complete.contains_key(&this.task_id) {
+
+        let (complete, waker) = reactor.complete.get_mut(&this.task_id).unwrap();
+        if *complete {
             Poll::Ready(())
         } else {
-            reactor
-                .complete
-                .entry(this.task_id)
-                .or_insert_with(|| Some(cx.waker().clone()));
+            *waker = Some(cx.waker().clone());
             Poll::Pending
         }
+    }
+}
+
+impl Drop for JoinHandle {
+    fn drop(&mut self) {
+        self.reactor.inner.borrow_mut().complete.remove(&self.task_id);
     }
 }
