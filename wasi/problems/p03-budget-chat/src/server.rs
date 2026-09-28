@@ -46,6 +46,7 @@ fn is_username_valid(clients: &HashMap<Id, ClientInfo>, username: &str) -> bool 
 /// # Panics
 /// * None
 #[instrument(skip_all)]
+#[allow(clippy::too_many_lines)]
 pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) -> Result<(), Error> {
     let mut id = 0;
     let mut clients = HashMap::new();
