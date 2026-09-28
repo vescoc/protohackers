@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use futures::{channel::mpsc, StreamExt};
+use futures::{StreamExt, channel::mpsc};
 
 use thiserror::Error;
 
@@ -60,7 +60,10 @@ pub enum ControllerMessage {
 /// Listen for clients and handle dispatching tickets.
 ///
 /// # Errors
+///
 /// * Error when socket returs an error.
+///
+/// # Panics
 #[instrument(skip(reactor, listener))]
 pub async fn run(reactor: Reactor, listener: TcpListener) -> Result<(), Error> {
     let mut controller = controller::Controller::default();

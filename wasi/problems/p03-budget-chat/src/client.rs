@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use bytes::{BufMut, BytesMut};
 
-use futures::{channel::mpsc, stream::FusedStream, Sink, SinkExt, Stream, StreamExt, TryStreamExt, FutureExt};
+use futures::{
+    FutureExt, Sink, SinkExt, Stream, StreamExt, TryStreamExt, channel::mpsc, stream::FusedStream,
+};
 
 use tracing::{debug, error, info, instrument};
 
@@ -137,7 +139,7 @@ where
     #[instrument(skip(self))]
     async fn chatting(mut self) -> Result<(), Error> {
         debug!("state: chatting");
-        
+
         let mut client = self.client.next().fuse();
         let mut read = self.read.next().fuse();
         loop {
@@ -172,7 +174,9 @@ where
                     debug!("got client message: {segment:?}");
                     match segment {
                         Some(Ok(message)) => {
-                            self.server.unbounded_send(ClientMessage::Message(self.id, Arc::new(message))).unwrap();
+                            self.server
+                                .unbounded_send(ClientMessage::Message(self.id, Arc::new(message)))
+                                .unwrap();
                         }
                         _ => break,
                     }
@@ -206,10 +210,12 @@ pub(crate) async fn handle_client(
     let (read, write) = stream.split();
     let client = Client {
         id,
-        read: std::pin::pin!(FramedRead::new(read, LinesDecoder::new())
-                             .into_stream()
-                             .map_ok(|line| String::from_utf8_lossy(&line).into_owned())
-                             .fuse()),
+        read: std::pin::pin!(
+            FramedRead::new(read, LinesDecoder::new())
+                .into_stream()
+                .map_ok(|line| String::from_utf8_lossy(&line).into_owned())
+                .fuse()
+        ),
         write: std::pin::pin!(FramedWrite::new(write, LinesEncoder).into_sink()),
         server: &mut server,
         client,
@@ -273,7 +279,7 @@ impl Encoder<String> for LinesEncoder {
 
     fn encode(&mut self, line: String, dst: &mut BytesMut) -> Result<(), Self::Error> {
         debug!("encode line: {line}");
-        
+
         dst.extend_from_slice(line.as_bytes());
         dst.put_u8(b'\n');
         Ok(())

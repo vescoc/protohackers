@@ -28,7 +28,9 @@ impl Notify {
     pub fn notify_one(&self) {
         // single thread
         let mut this = self.inner.borrow_mut();
-        if !this.notified && let Some(waker) = this.queue.pop_front() {
+        if !this.notified
+            && let Some(waker) = this.queue.pop_front()
+        {
             waker.wake();
         }
 

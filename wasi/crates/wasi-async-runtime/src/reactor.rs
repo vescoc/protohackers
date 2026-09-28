@@ -1,11 +1,10 @@
 use std::cell::RefCell;
 use std::future::Future;
-use std::mem;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, VecDeque};
 
 use wasi::io::poll::Pollable as WasiPollable;
 
@@ -13,26 +12,30 @@ use tracing::{instrument, trace};
 
 use crate::poller::{EventKey, Poller};
 
+type TaskId = usize;
+
 /// Returns the [`Waker`]
 ///
 /// # Note
 ///
 /// Only valid for single thread environment
-pub(crate) fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
+pub fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
     const VTABLE: RawWakerVTable = {
         /// Clone the current data
         ///
         /// # Note
         ///
         /// Only valid for single thread environment
-        unsafe fn clone(ptr: *const ()) -> RawWaker { unsafe {
-            let ptr = ptr.cast::<RefCell<bool>>();
+        unsafe fn clone(ptr: *const ()) -> RawWaker {
+            unsafe {
+                let ptr = ptr.cast::<RefCell<bool>>();
 
-            // increment the strong counter for the current data
-            Rc::increment_strong_count(ptr);
-            
-            RawWaker::new(ptr.cast(), &VTABLE)
-        }}
+                // increment the strong counter for the current data
+                Rc::increment_strong_count(ptr);
+
+                RawWaker::new(ptr.cast(), &VTABLE)
+            }
+        }
 
         /// Wake the task
         ///
@@ -41,13 +44,15 @@ pub(crate) fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
         /// # Note
         ///
         /// Only valid for single thread environment
-        unsafe fn wake(ptr: *const ()) { unsafe {
-            // Recover the original [`Rc`] pointer
-            let state = Rc::from_raw(ptr.cast::<RefCell<bool>>());
-            if let Ok(state) = state.try_borrow_mut().as_mut() {
-                **state = true;
+        unsafe fn wake(ptr: *const ()) {
+            unsafe {
+                // Recover the original [`Rc`] pointer
+                let state = Rc::from_raw(ptr.cast::<RefCell<bool>>());
+                if let Ok(state) = state.try_borrow_mut().as_mut() {
+                    **state = true;
+                }
             }
-        }}
+        }
 
         /// Wake the task by reference
         ///
@@ -56,13 +61,15 @@ pub(crate) fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
         /// # Note
         ///
         /// Only valid for single thread environment
-        unsafe fn wake_by_ref(ptr: *const ()) { unsafe {
-            let ptr = ptr.cast::<RefCell<bool>>();
-            let state = ptr.as_ref_unchecked();
-            if let Ok(state) = state.try_borrow_mut().as_mut() {
-                **state = true;
+        unsafe fn wake_by_ref(ptr: *const ()) {
+            unsafe {
+                let ptr = ptr.cast::<RefCell<bool>>();
+                let state = ptr.as_ref_unchecked();
+                if let Ok(state) = state.try_borrow_mut().as_mut() {
+                    **state = true;
+                }
             }
-        }}
+        }
 
         /// Wake the task
         ///
@@ -71,11 +78,13 @@ pub(crate) fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
         /// # Note
         ///
         /// Only valid for single thread environment
-        unsafe fn drop(ptr: *const ()) { unsafe {
-            // Recover the original [`Rc`] pointer
-            // and let Rust to drop it as normal
-            let _ = Rc::from_raw(ptr.cast::<RefCell<bool>>());
-        }}
+        unsafe fn drop(ptr: *const ()) {
+            unsafe {
+                // Recover the original [`Rc`] pointer
+                // and let Rust to drop it as normal
+                let _ = Rc::from_raw(ptr.cast::<RefCell<bool>>());
+            }
+        }
 
         RawWakerVTable::new(clone, wake, wake_by_ref, drop)
     };
@@ -111,19 +120,15 @@ pub struct Reactor {
     inner: Rc<RefCell<InnerReactor>>,
 }
 
-type TaskInfo = (
-    usize,
-    Rc<RefCell<bool>>,
-    Pin<Box<dyn Future<Output = ()>>>,
-);
+type TaskInfo = (TaskId, Rc<RefCell<bool>>, Pin<Box<dyn Future<Output = ()>>>);
 
 struct InnerReactor {
-    next_id: usize,
+    next_id: TaskId,
     main_task_state: Rc<RefCell<bool>>,
     poller: Poller,
     wakers: HashMap<EventKey, Waker>,
-    tasks: Vec<TaskInfo>,
-    complete: HashMap<usize, (bool, Option<Waker>)>,
+    tasks: VecDeque<TaskInfo>,
+    complete: HashMap<TaskId, (bool, Option<Waker>)>,
 }
 
 pub struct WaitFor<'a, P> {
@@ -150,7 +155,13 @@ impl Future for WaitFor<'_, Pollable> {
         let this = self.get_mut();
         let mut reactor = this.reactor.inner.borrow_mut();
 
-        let key = this.key.get_or_insert_with(|| reactor.poller.insert(this.pollable.take().expect("Invalid state: multi-thread env?")));
+        let key = this.key.get_or_insert_with(|| {
+            reactor.poller.insert(
+                this.pollable
+                    .take()
+                    .expect("Invalid state: multi-thread env?"),
+            )
+        });
         reactor.wakers.insert(*key, cx.waker().clone());
 
         if reactor.poller.get(*key).unwrap().ready() {
@@ -187,7 +198,7 @@ impl Reactor {
                     main_task_state: main_task_state.clone(),
                     poller: Poller::new(),
                     wakers: HashMap::new(),
-                    tasks: Vec::new(),
+                    tasks: VecDeque::new(),
                     complete: HashMap::new(),
                 })),
             },
@@ -199,87 +210,65 @@ impl Reactor {
     pub fn wait_for<P: Into<Pollable>>(&self, pollable: P) -> WaitFor<'_, Pollable> {
         WaitFor::new(self, pollable.into())
     }
-    
+
     #[instrument(skip_all)]
     pub(crate) fn block_until(&self) {
-        let mut tasks = {
-            let mut reactor = self.inner.borrow_mut();
-
-            mem::take(&mut reactor.tasks)
-        };
-
-        trace!("tasks len: {}", tasks.len());
-        
-        let mut complete = HashSet::new();
-        let mut pending = loop {
-            let mut pending = vec![];
-            while let Some((task_id, state, task)) = tasks.pop() {
-                let Some((state, mut task)) = ({
-                    let s = *state.borrow();
-                    if s {
-                        let state = state.clone();
-                        *state.borrow_mut() = false;
-                        Some((state, task))
-                    } else {
-                        pending.push((task_id, state, task));
-                        None
-                    }
-                }) else {
-                    continue;
+        trace!("block_util tasks len: {}", self.inner.borrow().tasks.len());
+        while self
+            .inner
+            .borrow()
+            .tasks
+            .iter()
+            .any(|(_, state, _)| *state.borrow())
+        {
+            let mut pending = self.inner.borrow().tasks.len();
+            while pending != 0 {
+                let Some((task_id, current_state, mut task)) =
+                    self.inner.borrow_mut().tasks.pop_front()
+                else {
+                    break;
                 };
+                pending -= 1;
 
-                let waker = task_waker(state.clone());
-                let mut cx = Context::from_waker(&waker);
+                if *current_state.borrow() {
+                    // the task is pollable
+                    let state = current_state.clone();
 
-                trace!("poll task id {task_id}");
-                if task.as_mut().poll(&mut cx).is_pending() {
-                    pending.push((task_id, state, task));
+                    *state.borrow_mut() = false;
+
+                    trace!("poll task id {task_id}");
+                    let waker = task_waker(state.clone());
+                    let mut cx = Context::from_waker(&waker);
+
+                    let original_len = self.inner.borrow().tasks.len();
+                    let is_pending = task.as_mut().poll(&mut cx).is_pending();
+                    let current_len = self.inner.borrow().tasks.len();
+
+                    pending += current_len - original_len;
+
+                    if is_pending {
+                        self.inner
+                            .borrow_mut()
+                            .tasks
+                            .push_back((task_id, state, task));
+                    } else if let Some((complete, waker)) =
+                        self.inner.borrow_mut().complete.get_mut(&task_id)
+                    {
+                        *complete = true;
+                        if let Some(waker) = waker {
+                            waker.wake_by_ref();
+                        }
+                    }
                 } else {
-                    complete.insert(task_id);
-                }
-            }
-
-            let mut new_tasks = {
-                let mut reactor = self.inner.borrow_mut();
-
-                mem::take(&mut reactor.tasks)
-            };
-
-            // check if new tasks are alls pollable
-            assert!(new_tasks.iter().all(|(_, state, _)| *state.borrow()), "new tasks in false state");
-
-            pending.append(&mut new_tasks);            
-
-            let ready = pending
-                .iter()
-                .filter(|(_, state, _)| *state.borrow())
-                .count();
-
-            trace!(
-                "pending tasks {:?} complete {complete:?} ready count: {ready}",
-                pending
-                    .iter()
-                    .map(|(task_id, ..)| task_id)
-                    .collect::<Vec<_>>(),
-            );
-
-            if ready == 0 {
-                break pending;
-            }
-
-            tasks = pending;
-        };
-
-        let mut reactor = self.inner.borrow_mut();
-        reactor.tasks.append(&mut pending);
-        for task_id in complete {
-            if let Some((complete, waker)) = reactor.complete.get_mut(&task_id) {
-                *complete = true;
-                if let Some(waker) = waker {
-                    waker.wake_by_ref();
+                    self.inner
+                        .borrow_mut()
+                        .tasks
+                        .push_back((task_id, current_state, task));
                 }
             }
         }
+
+        let mut reactor = self.inner.borrow_mut();
 
         if *reactor.main_task_state.borrow() {
             trace!("main task ready");
@@ -310,28 +299,29 @@ impl Reactor {
 
             reactor
                 .tasks
-                .push((task_id, Rc::new(RefCell::new(true)), Box::pin(f)));
+                .push_back((task_id, Rc::new(RefCell::new(true)), Box::pin(f)));
 
             task_id
         };
-        
+
         JoinHandle::new(self.clone(), task_id)
     }
 }
 
 pub struct JoinHandle {
     reactor: Reactor,
-    task_id: usize,
+    task_id: TaskId,
 }
 
 impl JoinHandle {
-    fn new(reactor: Reactor, task_id: usize) -> Self {
-        reactor.inner.borrow_mut().complete.insert(task_id, (false, None));
-        
-        Self {
-            reactor,
-            task_id,
-        }
+    fn new(reactor: Reactor, task_id: TaskId) -> Self {
+        reactor
+            .inner
+            .borrow_mut()
+            .complete
+            .insert(task_id, (false, None));
+
+        Self { reactor, task_id }
     }
 }
 
@@ -354,6 +344,10 @@ impl Future for JoinHandle {
 
 impl Drop for JoinHandle {
     fn drop(&mut self) {
-        self.reactor.inner.borrow_mut().complete.remove(&self.task_id);
+        self.reactor
+            .inner
+            .borrow_mut()
+            .complete
+            .remove(&self.task_id);
     }
 }

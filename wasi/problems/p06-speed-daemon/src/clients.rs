@@ -1,8 +1,8 @@
 use std::future::Future;
-use std::pin::{pin, Pin};
+use std::pin::{Pin, pin};
 use std::time::Duration;
 
-use futures::{channel::mpsc, FutureExt, Sink, SinkExt, Stream, StreamExt};
+use futures::{FutureExt, Sink, SinkExt, Stream, StreamExt, channel::mpsc};
 
 use futures_concurrency::future::Race;
 
@@ -14,7 +14,7 @@ use wasi_async::codec::{FramedRead, FramedWrite};
 use wasi_async::net::TcpStream;
 use wasi_async_runtime::Reactor;
 
-use crate::{wire, Cameras, ControllerMessage, Error};
+use crate::{Cameras, ControllerMessage, Error, wire};
 
 mod camera;
 mod dispatcher;

@@ -285,7 +285,8 @@ mod tests {
     fn test_read_Plate() {
         block_on(|_| async move {
             let buffer = [0x20, 0x04, 0x55, 0x4e, 0x31, 0x58, 0x00, 0x00, 0x03, 0xe8];
-            let mut stream = std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
+            let mut stream =
+                std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
 
             assert_eq!(
                 Packet::Plate {
@@ -303,7 +304,8 @@ mod tests {
         block_on(|_| async move {
             let mut buffer = vec![];
             {
-                let mut write = std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
+                let mut write =
+                    std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
 
                 write
                     .send(Packet::Plate {
@@ -313,7 +315,7 @@ mod tests {
                     .await
                     .unwrap();
             }
-            
+
             assert_eq!(
                 &buffer,
                 [0x20, 0x04, 0x55, 0x4e, 0x31, 0x58, 0x00, 0x00, 0x03, 0xe8].as_slice(),
@@ -326,7 +328,8 @@ mod tests {
     fn test_read_IAmCamera() {
         block_on(|_| async move {
             let buffer = [0x80, 0x00, 0x42, 0x00, 0x64, 0x00, 0x3c];
-            let mut stream = std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
+            let mut stream =
+                std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
 
             assert_eq!(
                 Packet::IAmCamera {
@@ -345,7 +348,8 @@ mod tests {
         block_on(|_| async move {
             let mut buffer = vec![];
             {
-                let mut write = std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
+                let mut write =
+                    std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
 
                 write
                     .send(Packet::IAmCamera {
@@ -356,7 +360,7 @@ mod tests {
                     .await
                     .unwrap();
             }
-            
+
             assert_eq!(
                 &buffer,
                 [0x80, 0x00, 0x42, 0x00, 0x64, 0x00, 0x3c].as_slice()
@@ -371,7 +375,8 @@ mod tests {
 
         block_on(|_| async move {
             let buffer = [0x81, 0x01, 0x00, 0x42];
-            let mut stream = std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
+            let mut stream =
+                std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
 
             assert_eq!(
                 Packet::IAmDispatcher { roads: vec![66] },
@@ -388,14 +393,15 @@ mod tests {
         block_on(|_| async move {
             let mut buffer = vec![];
             {
-                let mut write = std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
+                let mut write =
+                    std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
 
                 write
                     .send(Packet::IAmDispatcher { roads: vec![66] })
                     .await
                     .unwrap();
             }
-            
+
             assert_eq!(&buffer, [0x81, 0x01, 0x00, 0x42].as_slice());
         });
     }
@@ -405,7 +411,8 @@ mod tests {
     fn test_read_WantHeartbeat() {
         block_on(|_| async move {
             let buffer = [0x40, 0x00, 0x00, 0x00, 0x0a];
-            let mut stream = std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
+            let mut stream =
+                std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
 
             assert_eq!(
                 Packet::WantHeartbeat { interval: 10 },
@@ -420,14 +427,15 @@ mod tests {
         block_on(|_| async move {
             let mut buffer = vec![];
             {
-                let mut write = std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
+                let mut write =
+                    std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
 
                 write
                     .send(Packet::WantHeartbeat { interval: 10 })
                     .await
                     .unwrap();
             }
-            
+
             assert_eq!(&buffer, [0x40, 0x00, 0x00, 0x00, 0x0a].as_slice());
         });
     }
@@ -438,7 +446,8 @@ mod tests {
         block_on(|_| async move {
             let mut buffer = vec![];
             {
-                let mut write = std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
+                let mut write =
+                    std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
 
                 write
                     .send(Packet::Error {
@@ -447,7 +456,7 @@ mod tests {
                     .await
                     .unwrap();
             }
-            
+
             assert_eq!(buffer, vec![0x10, 0x03, 0x62, 0x61, 0x64]);
         });
     }
@@ -459,7 +468,8 @@ mod tests {
 
         block_on(|_| async move {
             let buffer = [0x10, 0x03, 0x62, 0x61, 0x64];
-            let mut stream = std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
+            let mut stream =
+                std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
 
             assert_eq!(
                 Packet::Error {
@@ -476,7 +486,8 @@ mod tests {
         block_on(|_| async move {
             let mut buffer = vec![];
             {
-                let mut write = std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
+                let mut write =
+                    std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
 
                 write
                     .send(Packet::Ticket {
@@ -491,7 +502,7 @@ mod tests {
                     .await
                     .unwrap();
             }
-            
+
             assert_eq!(
                 buffer,
                 vec![
@@ -510,7 +521,8 @@ mod tests {
                 0x21, 0x04, 0x55, 0x4e, 0x31, 0x58, 0x00, 0x42, 0x00, 0x64, 0x00, 0x01, 0xe2, 0x40,
                 0x00, 0x6e, 0x00, 0x01, 0xe3, 0xa8, 0x27, 0x10,
             ];
-            let mut stream = std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
+            let mut stream =
+                std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
 
             assert_eq!(
                 Packet::Ticket {
@@ -533,11 +545,12 @@ mod tests {
         block_on(|_| async move {
             let mut buffer = vec![];
             {
-                let mut write = std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
+                let mut write =
+                    std::pin::pin!(FramedWrite::new(&mut buffer, PacketCodec).into_sink());
 
                 write.send(Packet::Heartbeat).await.unwrap();
             }
-            
+
             assert_eq!(buffer, vec![0x41]);
         });
     }
@@ -547,7 +560,8 @@ mod tests {
     fn test_read_Heartbeat() {
         block_on(|_| async move {
             let buffer = [0x41];
-            let mut stream = std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
+            let mut stream =
+                std::pin::pin!(FramedRead::new(buffer.as_slice(), PacketCodec).into_stream());
 
             assert_eq!(Packet::Heartbeat, stream.next().await.unwrap().unwrap());
         });

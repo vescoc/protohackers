@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use futures::{channel::mpsc, StreamExt, FutureExt};
+use futures::{FutureExt, StreamExt, channel::mpsc};
 
 use tracing::{debug, instrument, warn};
 
 use wasi_async::net::TcpListener;
 
-use crate::{handle_client, ClientMessage, Error, Id, ServerMessage};
+use crate::{ClientMessage, Error, Id, ServerMessage, handle_client};
 
 struct ClientInfo {
     id: Id,
@@ -52,7 +52,7 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
     let (server_sender, mut receiver) = mpsc::unbounded();
 
     let mut incoming_clients = std::pin::pin!(listener.into_stream().fuse());
-    
+
     let mut receiver_message = receiver.next().fuse();
     let mut next_client = incoming_clients.next().fuse();
     loop {
@@ -70,23 +70,42 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
                             assert!(client.username.is_none());
 
                             client.username = Some(Arc::new(username));
-                            client.sender.unbounded_send(ServerMessage::UsernameAccepted).ok();
+                            client
+                                .sender
+                                .unbounded_send(ServerMessage::UsernameAccepted)
+                                .ok();
 
                             let mut users = vec![];
-                            for ClientInfo { username, .. } in clients.values().filter(|c| c.is_joined() && c.id != id) {
+                            for ClientInfo { username, .. } in
+                                clients.values().filter(|c| c.is_joined() && c.id != id)
+                            {
                                 // username must be set
                                 users.push(username.as_ref().unwrap().clone());
                             }
-                            clients.get(&id).unwrap().sender.unbounded_send(ServerMessage::Users(users)).ok();
+                            clients
+                                .get(&id)
+                                .unwrap()
+                                .sender
+                                .unbounded_send(ServerMessage::Users(users))
+                                .ok();
                         } else {
-                            clients.get(&id).unwrap().sender.unbounded_send(ServerMessage::UsernameInvalid).ok();
+                            clients
+                                .get(&id)
+                                .unwrap()
+                                .sender
+                                .unbounded_send(ServerMessage::UsernameInvalid)
+                                .ok();
                         }
                     }
 
                     ClientMessage::Joined(id) => {
                         if let Some(user) = clients[&id].username.clone() {
-                            for ClientInfo { sender, .. } in clients.values().filter(|c| c.is_joined() && c.id != id) {
-                                sender.unbounded_send(ServerMessage::AnnounceUser(user.clone())).ok();
+                            for ClientInfo { sender, .. } in
+                                clients.values().filter(|c| c.is_joined() && c.id != id)
+                            {
+                                sender
+                                    .unbounded_send(ServerMessage::AnnounceUser(user.clone()))
+                                    .ok();
                             }
                         } else {
                             warn!("joined from invalid id {id}");
@@ -95,8 +114,15 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
 
                     ClientMessage::Message(id, message) => {
                         if let Some(user) = clients[&id].username.clone() {
-                            for ClientInfo { sender, .. } in clients.values().filter(|c| c.is_joined() && c.id != id) {
-                                sender.unbounded_send(ServerMessage::Message(user.clone(), message.clone())).ok();
+                            for ClientInfo { sender, .. } in
+                                clients.values().filter(|c| c.is_joined() && c.id != id)
+                            {
+                                sender
+                                    .unbounded_send(ServerMessage::Message(
+                                        user.clone(),
+                                        message.clone(),
+                                    ))
+                                    .ok();
                             }
                         } else {
                             warn!("message from invalid id {id}");
@@ -106,8 +132,12 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
                     ClientMessage::Disconnect(id) => {
                         if let Some(client_info) = clients.get(&id) {
                             if let Some(user) = client_info.username.clone() {
-                                for ClientInfo { sender, .. } in clients.values().filter(|c| c.is_joined() && c.id != id) {
-                                    sender.unbounded_send(ServerMessage::Disconnected(user.clone())).ok();
+                                for ClientInfo { sender, .. } in
+                                    clients.values().filter(|c| c.is_joined() && c.id != id)
+                                {
+                                    sender
+                                        .unbounded_send(ServerMessage::Disconnected(user.clone()))
+                                        .ok();
                                 }
                             }
                             clients.remove(&id);
@@ -119,7 +149,9 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
                 next_client = current_next_client;
             }
             futures::future::Either::Right((client, current_receiver_message)) => {
-                let Some(Ok((socket, remote_address))) = client else { break Ok(()) };
+                let Some(Ok((socket, remote_address))) = client else {
+                    break Ok(());
+                };
 
                 debug!("new client: {remote_address:?}");
 
@@ -131,12 +163,14 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
 
                 sender.unbounded_send(ServerMessage::Welcome).ok();
 
-                clients.insert(id,
-                               ClientInfo {
-                                   id,
-                                   sender,
-                                   username: None,
-                               });
+                clients.insert(
+                    id,
+                    ClientInfo {
+                        id,
+                        sender,
+                        username: None,
+                    },
+                );
 
                 receiver_message = current_receiver_message;
                 next_client = incoming_clients.next().fuse();

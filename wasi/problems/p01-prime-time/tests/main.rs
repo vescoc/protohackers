@@ -57,7 +57,7 @@ fn test_invalid_number() {
 
             assert_eq!(&line, b"MALFORMED");
         }
-        
+
         stream.close().await.ok();
     });
 }

@@ -44,6 +44,9 @@ pub enum Error {
     Serde(#[from] serde_json::Error),
 }
 
+/// # Errors
+///
+/// * [`Error`] - Some error
 #[instrument(skip(stream))]
 pub async fn run(address: IpSocketAddress, mut stream: TcpStream) -> Result<(), Error> {
     info!("run");

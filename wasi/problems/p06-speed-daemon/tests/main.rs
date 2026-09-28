@@ -9,7 +9,7 @@ use wasi_async::codec::{FramedRead, FramedWrite};
 use wasi_async::net::{TcpListener, TcpStream};
 use wasi_async::time::timeout;
 
-use wasi_async_runtime::{block_on, Reactor};
+use wasi_async_runtime::{Reactor, block_on};
 
 use p06_speed_daemon::{run, wire};
 

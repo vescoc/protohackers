@@ -1,7 +1,7 @@
 use std::mem::ManuallyDrop;
 use std::rc::Rc;
 
-use futures::{stream, Stream};
+use futures::{Stream, stream};
 
 use tracing::{instrument, trace};
 
@@ -15,7 +15,7 @@ use wasi::io::streams::{InputStream, OutputStream, StreamError};
 use wasi_async_runtime::Reactor;
 
 use crate::io::{AsyncRead, AsyncWrite};
-use crate::net::{ip_address_family, LocalSocketAddress, ToSocketAddrs};
+use crate::net::{LocalSocketAddress, ToSocketAddrs, ip_address_family};
 
 pub struct TcpListener {
     reactor: Reactor,

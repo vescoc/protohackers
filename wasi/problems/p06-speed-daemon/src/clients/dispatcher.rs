@@ -1,5 +1,5 @@
 use std::future::Future;
-use std::pin::{pin, Pin};
+use std::pin::{Pin, pin};
 use std::sync::atomic;
 use std::time::Duration;
 
@@ -11,7 +11,7 @@ use futures_concurrency::future::Race;
 use tracing::{debug, info, instrument, warn};
 
 use crate::clients::heartbeat;
-use crate::{controller, wire, ControllerMessage, Error};
+use crate::{ControllerMessage, Error, controller, wire};
 
 #[derive(Debug)]
 struct DispatcherGuard(mpsc::UnboundedSender<ControllerMessage>, usize);

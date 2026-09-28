@@ -82,7 +82,7 @@ pub(crate) mod sealed {
                         reactor.wait_for(subscription).await;
                     }
                     Ok(Some(IpAddress::Ipv4(address))) => {
-                        return Ok(IpSocketAddress::Ipv4(Ipv4SocketAddress { address, port }))
+                        return Ok(IpSocketAddress::Ipv4(Ipv4SocketAddress { address, port }));
                     }
                     Ok(Some(IpAddress::Ipv6(addr))) => {
                         warn!("ignoring ipv6 address {addr:?}");

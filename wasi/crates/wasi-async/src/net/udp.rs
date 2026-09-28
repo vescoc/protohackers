@@ -8,12 +8,12 @@ use wasi::sockets::udp::{
 };
 use wasi::sockets::udp_create_socket::create_udp_socket;
 
-use wasi_async_runtime::sync::RwLock;
 use wasi_async_runtime::Reactor;
+use wasi_async_runtime::sync::RwLock;
 
 use tracing::{instrument, trace, warn};
 
-use crate::net::{ip_address_family, LocalSocketAddress, ToSocketAddrs};
+use crate::net::{LocalSocketAddress, ToSocketAddrs, ip_address_family};
 
 pub struct UdpSocket {
     reactor: Reactor,
@@ -113,7 +113,8 @@ impl UdpSocket {
         if let UdpSocketInner::Connect {
             outgoing_datagram_stream,
             ..
-        } = &*self.inner.read().await {
+        } = &*self.inner.read().await
+        {
             while outgoing_datagram_stream.check_send()? == 0 {
                 self.reactor
                     .wait_for(outgoing_datagram_stream.subscribe())
@@ -196,7 +197,7 @@ impl UdpSocket {
                     {
                         return Ok(data);
                     }
-                    
+
                     self.reactor
                         .wait_for(incoming_datagram_stream.subscribe())
                         .await;

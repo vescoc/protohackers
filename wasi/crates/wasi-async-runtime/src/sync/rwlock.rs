@@ -46,7 +46,7 @@ impl<T> RwLock<T> {
     #[instrument(skip_all)]
     pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>> {
         trace!("try_write");
-        
+
         let permit = self.lock.try_acquire()?;
 
         if unsafe { *self.readers.get() } > 0 {
@@ -76,7 +76,7 @@ impl<T> RwLock<T> {
             readers: &self.readers,
         }
     }
-    
+
     #[instrument(skip_all)]
     pub fn try_read(&self) -> Option<RwLockReadGuard<'_, T>> {
         trace!("try_read");
@@ -159,14 +159,14 @@ mod tests {
                 std::task::Poll::Pending
             }
         })
-            .await;
+        .await;
     }
-    
+
     fn init_tracing_subscriber() {
         static INIT_TRACING_SUBSCRIBER: Once = Once::new();
         INIT_TRACING_SUBSCRIBER.call_once(tracing_subscriber::fmt::init);
     }
-    
+
     #[test]
     fn test_read_lock() {
         init_tracing_subscriber();
@@ -196,7 +196,7 @@ mod tests {
         let read_lock_2 = lock.try_read().unwrap();
         assert_eq!(*read_lock_1, 0);
         assert_eq!(*read_lock_2, 0);
-    }    
+    }
 
     #[test]
     fn test_try_write_lock() {
@@ -215,7 +215,7 @@ mod tests {
 
             assert!(lock.try_write().is_none());
         }
-    }    
+    }
 
     #[test]
     fn test_try_write_lock_multi() {
@@ -236,7 +236,7 @@ mod tests {
 
             assert!(lock.try_write().is_none());
         }
-    }    
+    }
 
     #[test]
     fn test_rw_lock_writer_during_active_reader() {
@@ -311,7 +311,7 @@ mod tests {
             assert_eq!(*rw.read().await, 150);
         });
     }
-    
+
     #[test]
     fn test_rw_lock() {
         init_tracing_subscriber();
@@ -358,7 +358,7 @@ mod tests {
                     let value = &mut *rw.write().await;
 
                     *value += 1;
-                    
+
                     trace!("handle_5: {value}");
                 })
             };
@@ -374,7 +374,9 @@ mod tests {
                 })
             };
 
-            (handle_1, handle_2, handle_3, handle_4, handle_5).join().await
+            (handle_1, handle_2, handle_3, handle_4, handle_5)
+                .join()
+                .await
         });
     }
 }

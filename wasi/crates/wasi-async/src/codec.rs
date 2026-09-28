@@ -43,10 +43,7 @@ pub struct FramedRead<R, D> {
 
 impl<R, D> FramedRead<R, D> {
     pub fn new(read: R, decoder: D) -> Self {
-        Self {
-            read,
-            decoder,
-        }
+        Self { read, decoder }
     }
 }
 
@@ -146,10 +143,14 @@ impl<W: AsyncWrite + Unpin, E: Encoder<Item> + Unpin, Item> FramedWrite<W, Item,
     #[expect(clippy::cast_possible_truncation, reason = "can happen")]
     pub fn into_sink(self) -> impl Sink<Item, Error = E::Error> {
         sink::unfold(
-            (self.write, self.encoder, BytesMut::with_capacity(INITIAL_CAPACITY)),
+            (
+                self.write,
+                self.encoder,
+                BytesMut::with_capacity(INITIAL_CAPACITY),
+            ),
             |(mut writer, mut encoder, mut buffer), item| async move {
                 encoder.encode(item, &mut buffer)?;
-                
+
                 while !buffer.is_empty() {
                     let n = writer.write(&buffer).await?;
                     trace!("sent {n} bytes");

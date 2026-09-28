@@ -8,8 +8,8 @@ use futures_concurrency::future::Race;
 
 use tracing::{debug, info, instrument, warn};
 
-use crate::clients::{heartbeat, Handler, HandlerResult};
-use crate::{controller, wire, Cameras, ControllerMessage, Error};
+use crate::clients::{Handler, HandlerResult, heartbeat};
+use crate::{Cameras, ControllerMessage, Error, controller, wire};
 
 #[derive(Error, Debug)]
 #[allow(clippy::module_name_repetitions)]
@@ -52,7 +52,7 @@ impl Drop for CameraGuard {
 }
 
 #[instrument(skip(controller_sender, cameras, heartbeat, read, write))]
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::similar_names)]
 pub(crate) async fn handle<R, W, E>(
     controller_sender: UnboundedSender<ControllerMessage>,
     cameras: Cameras,
