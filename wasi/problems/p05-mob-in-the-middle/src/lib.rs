@@ -38,9 +38,8 @@ pub enum Error {
 ///
 /// - [`Error::Tcp`] -- if there are problems with tcp
 /// - [`Error::Stream`] -- if there are problems with the stream
-#[instrument(skip(reactor, listener))]
+#[instrument(skip(listener))]
 pub async fn run(
-    reactor: Reactor,
     listener: TcpListener,
     chat_address: Rc<String>,
     chat_port: u16,
@@ -53,20 +52,18 @@ pub async fn run(
 
         let chat_address = chat_address.clone();
         let boguscoin = boguscoin.clone();
-        let c_reactor = reactor.clone();
-        reactor
-            .spawn(async move {
-                handle(c_reactor, stream, chat_address, chat_port, boguscoin)
-                    .await
-                    .ok();
-            })
-            .instrument(info_span!("handle"));
+        Reactor::spawn_in_current(async move {
+            handle(stream, chat_address, chat_port, boguscoin)
+                .await
+                .ok();
+        })
+        .instrument(info_span!("handle"))
+        .await;
     }
 }
 
 #[instrument(skip_all)]
 async fn handle(
-    reactor: Reactor,
     stream: TcpStream,
     chat_address: Rc<String>,
     chat_port: u16,
@@ -74,8 +71,7 @@ async fn handle(
 ) -> Result<(), Error> {
     debug!("start handle");
 
-    let chat_stream =
-        TcpStream::connect(reactor.clone(), format!("{chat_address}:{chat_port}")).await?;
+    let chat_stream = TcpStream::connect(format!("{chat_address}:{chat_port}")).await?;
 
     debug!("start workers");
     let (client_read, client_write) = stream.into_split();
@@ -83,20 +79,20 @@ async fn handle(
     let (chat_read, chat_write) = chat_stream.into_split();
 
     let upstream_boguscoin = boguscoin.clone();
-    let upstream_task = reactor
-        .spawn(async move {
-            handle_upstream(client_read, chat_write, upstream_boguscoin)
-                .await
-                .ok();
-        })
-        .instrument(info_span!("upstream_task"));
-    let downstream_task = reactor
-        .spawn(async move {
-            handle_downstream(client_write, chat_read, boguscoin)
-                .await
-                .ok();
-        })
-        .instrument(info_span!("downstream_task"));
+    let upstream_task = Reactor::spawn_in_current(async move {
+        handle_upstream(client_read, chat_write, upstream_boguscoin)
+            .await
+            .ok();
+    })
+    .instrument(info_span!("upstream_task"))
+    .await;
+    let downstream_task = Reactor::spawn_in_current(async move {
+        handle_downstream(client_write, chat_read, boguscoin)
+            .await
+            .ok();
+    })
+    .instrument(info_span!("downstream_task"))
+    .await;
 
     debug!("wait workers");
     futures::join!(upstream_task, downstream_task);

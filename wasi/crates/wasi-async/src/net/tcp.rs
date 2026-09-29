@@ -25,7 +25,9 @@ pub struct TcpListener {
 impl TcpListener {
     /// # Errors
     #[instrument(skip_all)]
-    pub async fn bind(reactor: Reactor, address: impl ToSocketAddrs) -> Result<Self, ErrorCode> {
+    pub async fn bind(address: impl ToSocketAddrs) -> Result<Self, ErrorCode> {
+        let reactor = Reactor::current().await;
+
         let network = instance_network();
 
         let socket_address = address.to_socket_addr(&reactor, &network).await?;
@@ -147,10 +149,9 @@ pub struct TcpStream(Option<TcpStreamInner>);
 impl TcpStream {
     /// # Errors
     #[instrument(skip_all)]
-    pub async fn connect(
-        reactor: Reactor,
-        remote_address: impl ToSocketAddrs,
-    ) -> Result<Self, ErrorCode> {
+    pub async fn connect(remote_address: impl ToSocketAddrs) -> Result<Self, ErrorCode> {
+        let reactor = Reactor::current().await;
+
         let network = instance_network();
 
         let socket_address = remote_address.to_socket_addr(&reactor, &network).await?;

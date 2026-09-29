@@ -16,7 +16,7 @@ fn test_session() {
 async fn async_test_session(reactor: Reactor) {
     let (address, port) = spawn_app(reactor.clone()).await;
 
-    let mut stream = TcpStream::connect(reactor, format!("{address}:{port}"))
+    let mut stream = TcpStream::connect(format!("{address}:{port}"))
         .await
         .expect("cannot connect");
     let (mut read, mut write) = stream.split();
@@ -38,7 +38,7 @@ async fn spawn_app(reactor: Reactor) -> (String, u16) {
 
     let address = "127.0.0.1";
 
-    let listener = TcpListener::bind(reactor.clone(), format!("{address}:0"))
+    let listener = TcpListener::bind(format!("{address}:0"))
         .await
         .expect("cannot bind");
     let port = listener.local_addr().expect("cannot get local addr").port();

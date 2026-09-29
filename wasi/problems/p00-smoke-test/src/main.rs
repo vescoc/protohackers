@@ -1,7 +1,7 @@
 use wasi::sockets::network::ErrorCode;
 
 use wasi_async::net::TcpListener;
-use wasi_async_runtime::block_on;
+use wasi_async_runtime::{Reactor, block_on};
 
 use tracing::{debug, info, instrument};
 
@@ -25,19 +25,19 @@ fn main() -> Result<(), anyhow::Error> {
 
     let args = Args::parse();
 
-    let result: Result<_, ErrorCode> = block_on(|reactor| async move {
-        let socket =
-            TcpListener::bind(reactor.clone(), format!("{}:{}", args.address, args.port)).await?;
+    let result: Result<_, ErrorCode> = block_on(|_| async move {
+        let socket = TcpListener::bind(format!("{}:{}", args.address, args.port)).await?;
 
         loop {
             let (stream, address) = socket.accept().await?;
 
             debug!("new client: {address:?}");
 
-            reactor.clone().spawn(async move {
+            Reactor::spawn_in_current(async move {
                 let result = p00_smoke_test::run(address, stream).await;
                 info!("result: {result:?}");
-            });
+            })
+            .await;
         }
     });
 

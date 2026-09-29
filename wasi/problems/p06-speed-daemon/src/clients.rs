@@ -12,7 +12,6 @@ use wasi::sockets::network::IpSocketAddress;
 
 use wasi_async::codec::{FramedRead, FramedWrite};
 use wasi_async::net::TcpStream;
-use wasi_async_runtime::Reactor;
 
 use crate::{Cameras, ControllerMessage, Error, wire};
 
@@ -29,15 +28,14 @@ enum ClientType {
     Unknown,
 }
 
-#[instrument(skip(reactor, stream, controller_sender, cameras))]
+#[instrument(skip(stream, controller_sender, cameras))]
 pub(crate) async fn handle(
     remote_address: IpSocketAddress,
-    reactor: Reactor,
     mut stream: TcpStream,
     controller_sender: mpsc::UnboundedSender<ControllerMessage>,
     cameras: Cameras,
 ) -> Result<(), Error> {
-    let mut heartbeat = heartbeat::Heartbeat::new(reactor);
+    let mut heartbeat = heartbeat::Heartbeat::new();
 
     let (read, write) = stream.split();
     let mut read = std::pin::pin!(FramedRead::new(read, wire::PacketCodec).into_stream());

@@ -21,11 +21,10 @@ fn main() -> Result<(), anyhow::Error> {
 
     let args = Args::parse();
 
-    let result = wasi_async_runtime::block_on(|reactor| async move {
-        let listener =
-            TcpListener::bind(reactor.clone(), format!("{}:{}", args.address, args.port)).await?;
+    let result = wasi_async_runtime::block_on(|_| async move {
+        let listener = TcpListener::bind(format!("{}:{}", args.address, args.port)).await?;
 
-        p03_budget_chat::run(reactor, listener).await
+        p03_budget_chat::run(listener).await
     });
 
     info!("done: {result:?}");

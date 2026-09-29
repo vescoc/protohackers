@@ -17,15 +17,14 @@ use p05_mob_in_the_middle::{BOGUSCOIN, run};
 fn test_session() {
     init_logging();
 
-    block_on(|reactor| {
+    block_on(|_| {
         async move {
-            let (chat_address, chat_port) = spawn_budget_chat_app(reactor.clone()).await;
-            let (address, port) = spawn_app(reactor.clone(), chat_address.clone(), chat_port).await;
+            let (chat_address, chat_port) = spawn_budget_chat_app().await;
+            let (address, port) = spawn_app(chat_address.clone(), chat_port).await;
 
-            let mut stream_alice =
-                TcpStream::connect(reactor.clone(), format!("{chat_address}:{port}"))
-                    .await
-                    .unwrap();
+            let mut stream_alice = TcpStream::connect(format!("{chat_address}:{port}"))
+                .await
+                .unwrap();
             let (read_alice, mut write_alice) = stream_alice.split();
             let mut read_alice =
                 std::pin::pin!(FramedRead::new(read_alice, LinesDecoder::new()).into_stream());
@@ -33,7 +32,7 @@ fn test_session() {
             write_alice.write_all(b"alice\n").await.unwrap();
             info!("write alice");
 
-            let mut stream_bob = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+            let mut stream_bob = TcpStream::connect(format!("{address}:{port}"))
                 .await
                 .unwrap();
             let (read_bob, mut write_bob) = stream_bob.split();
@@ -77,10 +76,10 @@ fn init_logging() {
     INIT_TRACING_SUBSCRIBER.call_once(tracing_subscriber::fmt::init);
 }
 
-async fn spawn_budget_chat_app(reactor: Reactor) -> (String, u16) {
+async fn spawn_budget_chat_app() -> (String, u16) {
     let address = "127.0.0.1";
 
-    let listener = TcpListener::bind(reactor.clone(), format!("{address}:0"))
+    let listener = TcpListener::bind(format!("{address}:0"))
         .await
         .expect("cannot bind budget_chat app");
     let port = listener
@@ -88,24 +87,23 @@ async fn spawn_budget_chat_app(reactor: Reactor) -> (String, u16) {
         .expect("cannot get local address")
         .port();
 
-    reactor.clone().spawn(
+    Reactor::spawn_in_current(
         async move {
-            p03_budget_chat::run(reactor, listener)
-                .await
-                .expect("run failed");
+            p03_budget_chat::run(listener).await.expect("run failed");
         }
         .instrument(info_span!("budget_chat_app")),
-    );
+    )
+    .await;
 
     info!("spawned budget chat app {address}:{port}");
 
     (address.to_string(), port)
 }
 
-async fn spawn_app(reactor: Reactor, chat_address: String, chat_port: u16) -> (String, u16) {
+async fn spawn_app(chat_address: String, chat_port: u16) -> (String, u16) {
     let address = "127.0.0.1";
 
-    let listener = TcpListener::bind(reactor.clone(), format!("{address}:0"))
+    let listener = TcpListener::bind(format!("{address}:0"))
         .await
         .expect("cannot bind main app");
     let port = listener
@@ -113,10 +111,9 @@ async fn spawn_app(reactor: Reactor, chat_address: String, chat_port: u16) -> (S
         .expect("cannot get local address")
         .port();
 
-    reactor.clone().spawn(
+    Reactor::spawn_in_current(
         async move {
             run(
-                reactor,
                 listener,
                 Rc::new(chat_address),
                 chat_port,
@@ -126,7 +123,8 @@ async fn spawn_app(reactor: Reactor, chat_address: String, chat_port: u16) -> (S
             .expect("run failed");
         }
         .instrument(info_span!("app")),
-    );
+    )
+    .await;
 
     info!("spawned budget chat app {address}:{port}");
 

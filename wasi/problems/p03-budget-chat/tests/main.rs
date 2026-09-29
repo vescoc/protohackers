@@ -7,6 +7,7 @@ use wasi_async::codec::{FramedRead, LinesDecoder};
 use wasi_async::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use wasi_async::net::{TcpListener, TcpStream};
 use wasi_async::time;
+use wasi_async_runtime::Reactor;
 
 use tracing::{debug, info, info_span, trace};
 use tracing_futures::Instrument;
@@ -15,17 +16,17 @@ use tracing_futures::Instrument;
 fn test_session() {
     init_tracing_subscriber();
 
-    wasi_async_runtime::block_on(|reactor| {
+    wasi_async_runtime::block_on(|_| {
         async move {
-            let (address, port) = spawn_app(reactor.clone()).await;
+            let (address, port) = spawn_app().await;
 
-            let stream_bob = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+            let stream_bob = TcpStream::connect(format!("{address}:{port}"))
                 .await
                 .unwrap();
             let (mut read_bob, mut write_bob) = stream_bob.into_split();
             write_bob.write_all(b"bob\n").await.unwrap();
             write_bob.flush().await.unwrap();
-            reactor.clone().spawn(async move {
+            Reactor::spawn_in_current(async move {
                 let mut dev_null = sink::drain();
                 loop {
                     let Ok(line) = read_bob.read(1024).await else {
@@ -34,15 +35,16 @@ fn test_session() {
                     trace!("bob: {:?}", String::from_utf8_lossy(&line));
                     dev_null.send(line).await.unwrap();
                 }
-            });
+            })
+            .await;
 
-            let stream_charlie = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+            let stream_charlie = TcpStream::connect(format!("{address}:{port}"))
                 .await
                 .unwrap();
             let (mut read_charlie, mut write_charlie) = stream_charlie.into_split();
             write_charlie.write_all(b"charlie\n").await.unwrap();
             write_charlie.flush().await.unwrap();
-            reactor.clone().spawn(async move {
+            Reactor::spawn_in_current(async move {
                 let mut dev_null = sink::drain();
                 loop {
                     let Ok(line) = read_charlie.read(1024).await else {
@@ -51,15 +53,16 @@ fn test_session() {
                     trace!("charlie: {:?}", String::from_utf8_lossy(&line));
                     dev_null.send(line).await.unwrap();
                 }
-            });
+            })
+            .await;
 
-            let stream_dave = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+            let stream_dave = TcpStream::connect(format!("{address}:{port}"))
                 .await
                 .unwrap();
             let (mut read_dave, mut write_dave) = stream_dave.into_split();
             write_dave.write_all(b"dave\n").await.unwrap();
             write_dave.flush().await.unwrap();
-            reactor.clone().spawn(async move {
+            Reactor::spawn_in_current(async move {
                 let mut dev_null = sink::drain();
                 loop {
                     let Ok(line) = read_dave.read(1024).await else {
@@ -68,9 +71,10 @@ fn test_session() {
                     trace!("dave: {:?}", String::from_utf8_lossy(&line));
                     dev_null.send(line).await.unwrap();
                 }
-            });
+            })
+            .await;
 
-            let mut stream_alice = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+            let mut stream_alice = TcpStream::connect(format!("{address}:{port}"))
                 .await
                 .expect("cannot connect");
             let (read_alice, mut write_alice) = stream_alice.split();
@@ -124,11 +128,11 @@ fn test_session() {
 fn test_not_joining() {
     init_tracing_subscriber();
 
-    wasi_async_runtime::block_on(|reactor| {
+    wasi_async_runtime::block_on(|_| {
         async move {
-            let (address, port) = spawn_app(reactor.clone()).await;
+            let (address, port) = spawn_app().await;
 
-            let mut stream_alice = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+            let mut stream_alice = TcpStream::connect(format!("{address}:{port}"))
                 .await
                 .expect("cannot connect");
             let (read_alice, mut write_alice) = stream_alice.split();
@@ -144,20 +148,14 @@ fn test_not_joining() {
             let result = read_alice.next().await.unwrap().unwrap();
             assert_eq!(result, b"* The room contains:");
 
-            let mut stream_bob = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+            let mut stream_bob = TcpStream::connect(format!("{address}:{port}"))
                 .await
                 .unwrap();
             let (_, mut write_bob) = stream_bob.split();
             write_bob.write_all(b"bob").await.unwrap(); // no newline
             stream_bob.close().await.unwrap();
 
-            match time::timeout(
-                reactor.clone(),
-                Duration::from_millis(100),
-                read_alice.next(),
-            )
-            .await
-            {
+            match time::timeout(Duration::from_millis(100), read_alice.next()).await {
                 Err(time::Elapsed) => info!("elapsed"),
                 Ok(Some(Ok(message))) => panic!("invalid: {:?}", std::str::from_utf8(&message)),
                 Ok(payload) => panic!("invalid: {payload:?}"),
@@ -167,10 +165,10 @@ fn test_not_joining() {
     });
 }
 
-async fn spawn_app(reactor: wasi_async_runtime::Reactor) -> (String, u16) {
+async fn spawn_app() -> (String, u16) {
     let address = "127.0.0.1";
 
-    let listener = TcpListener::bind(reactor.clone(), format!("{address}:0"))
+    let listener = TcpListener::bind(format!("{address}:0"))
         .await
         .expect("cannot bind");
     let port = listener
@@ -178,11 +176,10 @@ async fn spawn_app(reactor: wasi_async_runtime::Reactor) -> (String, u16) {
         .expect("cannot get local address")
         .port();
 
-    reactor.clone().spawn(async move {
-        p03_budget_chat::run(reactor.clone(), listener)
-            .await
-            .expect("run failed");
-    });
+    Reactor::spawn_in_current(async move {
+        p03_budget_chat::run(listener).await.expect("run failed");
+    })
+    .await;
 
     info!("spawned app {address}:{port}");
 

@@ -140,32 +140,13 @@ impl<T> Drop for RwLockReadGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
-    use std::sync::Once;
 
     use futures_concurrency::future::Join;
 
-    use crate::block_on;
+    use crate::tests::init_tracing_subscriber;
+    use crate::{block_on, yield_now};
 
     use super::*;
-
-    async fn yield_now() {
-        let mut yielded = false;
-        std::future::poll_fn(move |cx| {
-            if yielded {
-                std::task::Poll::Ready(())
-            } else {
-                yielded = true;
-                cx.waker().wake_by_ref();
-                std::task::Poll::Pending
-            }
-        })
-        .await;
-    }
-
-    fn init_tracing_subscriber() {
-        static INIT_TRACING_SUBSCRIBER: Once = Once::new();
-        INIT_TRACING_SUBSCRIBER.call_once(tracing_subscriber::fmt::init);
-    }
 
     #[test]
     fn test_read_lock() {

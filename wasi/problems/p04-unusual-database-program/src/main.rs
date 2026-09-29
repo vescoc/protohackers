@@ -23,8 +23,8 @@ fn main() -> Result<(), anyhow::Error> {
 
     info!("start");
 
-    let result = wasi_async_runtime::block_on(|reactor| async move {
-        let socket = UdpSocket::bind(reactor, format!("{}:{}", args.address, args.port)).await?;
+    let result = wasi_async_runtime::block_on(|_| async move {
+        let socket = UdpSocket::bind(format!("{}:{}", args.address, args.port)).await?;
 
         run(socket).await
     });

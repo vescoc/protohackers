@@ -64,8 +64,8 @@ pub enum ControllerMessage {
 /// * Error when socket returs an error.
 ///
 /// # Panics
-#[instrument(skip(reactor, listener))]
-pub async fn run(reactor: Reactor, listener: TcpListener) -> Result<(), Error> {
+#[instrument(skip(listener))]
+pub async fn run(listener: TcpListener) -> Result<(), Error> {
     let mut controller = controller::Controller::default();
     let mut dispatchers = dispatchers::Dispatchers::default();
 
@@ -73,7 +73,7 @@ pub async fn run(reactor: Reactor, listener: TcpListener) -> Result<(), Error> {
 
     let (controller_sender, mut controller_receiver) = mpsc::unbounded();
 
-    reactor.clone().spawn(async move {
+    Reactor::spawn_in_current(async move {
         loop {
             match controller_receiver.next().await {
                 Some(ControllerMessage::AddDispatcher(id, roads, ticket_sender)) => {
@@ -97,7 +97,8 @@ pub async fn run(reactor: Reactor, listener: TcpListener) -> Result<(), Error> {
                 }
             }
         }
-    });
+    })
+    .await;
 
     loop {
         debug!("waiting client");
@@ -105,24 +106,18 @@ pub async fn run(reactor: Reactor, listener: TcpListener) -> Result<(), Error> {
             Ok((socket, remote_address)) => {
                 info!("new client {remote_address:?}");
 
-                let c_reactor = reactor.clone();
                 let controller_sender = controller_sender.clone();
                 let cameras = cameras.clone();
-                reactor.clone().spawn(async move {
-                    let Err(err) = clients::handle(
-                        remote_address,
-                        c_reactor,
-                        socket,
-                        controller_sender,
-                        cameras,
-                    )
-                    .await
+                Reactor::spawn_in_current(async move {
+                    let Err(err) =
+                        clients::handle(remote_address, socket, controller_sender, cameras).await
                     else {
                         debug!("done client {remote_address:?}");
                         return;
                     };
                     warn!("handle client error {remote_address:?}: {err:?}");
-                });
+                })
+                .await;
             }
             Err(err) => {
                 warn!("listener error: {err:?}");

@@ -4,18 +4,15 @@ use std::time::Duration;
 use tracing::{info, instrument};
 
 use wasi_async::time::{self, Instant};
-use wasi_async_runtime::Reactor;
 
 pub(crate) struct Heartbeat {
-    reactor: Reactor,
     interval: Option<time::Interval>,
     period: Option<Duration>,
 }
 
 impl Heartbeat {
-    pub(crate) fn new(reactor: Reactor) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            reactor,
             period: None,
             interval: None,
         }
@@ -28,11 +25,7 @@ impl Heartbeat {
         if period == Duration::from_millis(0) {
             self.interval = None;
         } else {
-            self.interval = Some(time::interval_at(
-                self.reactor.clone(),
-                Instant::now() + period,
-                period,
-            ));
+            self.interval = Some(time::interval_at(Instant::now() + period, period));
         }
     }
 

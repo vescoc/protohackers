@@ -6,6 +6,7 @@ use futures::{FutureExt, StreamExt, channel::mpsc};
 use tracing::{debug, instrument, warn};
 
 use wasi_async::net::TcpListener;
+use wasi_async_runtime::Reactor;
 
 use crate::{ClientMessage, Error, Id, ServerMessage, handle_client};
 
@@ -47,7 +48,7 @@ fn is_username_valid(clients: &HashMap<Id, ClientInfo>, username: &str) -> bool 
 /// * None
 #[instrument(skip_all)]
 #[allow(clippy::too_many_lines)]
-pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) -> Result<(), Error> {
+pub async fn run(listener: TcpListener) -> Result<(), Error> {
     let mut id = 0;
     let mut clients = HashMap::new();
     let (server_sender, mut receiver) = mpsc::unbounded();
@@ -160,7 +161,13 @@ pub async fn run(reactor: wasi_async_runtime::Reactor, listener: TcpListener) ->
 
                 let (sender, receiver) = mpsc::unbounded();
 
-                reactor.spawn(handle_client(id, socket, server_sender.clone(), receiver));
+                Reactor::spawn_in_current(handle_client(
+                    id,
+                    socket,
+                    server_sender.clone(),
+                    receiver,
+                ))
+                .await;
 
                 sender.unbounded_send(ServerMessage::Welcome).ok();
 

@@ -54,7 +54,10 @@ impl Poller {
             }
         }
 
-        trace!("start poll targets {targets:?} indexes {indexes:?}");
+        trace!(
+            "start poll targets/indexes {:?}",
+            targets.iter().zip(indexes.iter()).collect::<Vec<_>>()
+        );
         let ready_indexes = if targets.is_empty() {
             vec![]
         } else {

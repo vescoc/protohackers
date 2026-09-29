@@ -16,12 +16,12 @@ use p06_speed_daemon::{run, wire};
 #[test]
 #[allow(clippy::too_many_lines)]
 fn test_session() {
-    block_on(|reactor| async move {
-        let (address, port) = spawn_app(reactor.clone()).await;
+    block_on(|_| async move {
+        let (address, port) = spawn_app().await;
 
         {
             debug!("send IAmCamera 1");
-            let mut stream = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+            let mut stream = TcpStream::connect(format!("{address}:{port}"))
                 .await
                 .unwrap();
             let (_, write) = stream.split();
@@ -49,7 +49,7 @@ fn test_session() {
 
         {
             debug!("send IAmCamera 2");
-            let mut stream = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+            let mut stream = TcpStream::connect(format!("{address}:{port}"))
                 .await
                 .unwrap();
             let (_, write) = stream.split();
@@ -77,7 +77,7 @@ fn test_session() {
 
         {
             debug!("send IAmDispatcher");
-            let mut stream = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+            let mut stream = TcpStream::connect(format!("{address}:{port}"))
                 .await
                 .unwrap();
             let (read, write) = stream.split();
@@ -90,7 +90,7 @@ fn test_session() {
                 .unwrap();
             debug!("sent IAmDispatcher");
 
-            let ticket = timeout(reactor, Duration::from_millis(1000), read.next())
+            let ticket = timeout(Duration::from_millis(1000), read.next())
                 .await
                 .unwrap()
                 .unwrap()
@@ -220,13 +220,13 @@ fn test_session() {
 //     });
 // }
 
-async fn spawn_app(reactor: Reactor) -> (String, u16) {
+async fn spawn_app() -> (String, u16) {
     static INIT_TRACING_SUBSCRIBER: Once = Once::new();
     INIT_TRACING_SUBSCRIBER.call_once(tracing_subscriber::fmt::init);
 
     let address = "127.0.0.1";
 
-    let listener = TcpListener::bind(reactor.clone(), format!("{address}:0"))
+    let listener = TcpListener::bind(format!("{address}:0"))
         .await
         .expect("cannot bind app");
     let port = listener
@@ -234,9 +234,10 @@ async fn spawn_app(reactor: Reactor) -> (String, u16) {
         .expect("cannot get local address")
         .port();
 
-    reactor.clone().spawn(async move {
-        run(reactor, listener).await.expect("run failed");
-    });
+    Reactor::spawn_in_current(async move {
+        run(listener).await.expect("run failed");
+    })
+    .await;
 
     info!("spawned app {address}:{port}");
 

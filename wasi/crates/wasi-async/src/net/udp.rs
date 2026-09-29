@@ -40,10 +40,9 @@ impl UdpSocket {
     /// # Errors
     /// # Panics
     #[instrument(skip_all)]
-    pub async fn bind(
-        reactor: Reactor,
-        address: impl ToSocketAddrs,
-    ) -> Result<Self, network::ErrorCode> {
+    pub async fn bind(address: impl ToSocketAddrs) -> Result<Self, network::ErrorCode> {
+        let reactor = Reactor::current().await;
+
         let network = instance_network();
 
         let socket_address = address.to_socket_addr(&reactor, &network).await?;

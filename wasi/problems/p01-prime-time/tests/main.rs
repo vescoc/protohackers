@@ -2,6 +2,8 @@ use std::sync::Once;
 
 use futures::StreamExt;
 
+use wasi_async_runtime::Reactor;
+
 use wasi_async::codec::{FramedRead, LinesDecoder};
 use wasi_async::io::{AsyncWrite, AsyncWriteExt};
 use wasi_async::net::{TcpListener, TcpStream};
@@ -10,10 +12,10 @@ use tracing::info;
 
 #[test]
 fn test_invalid_number_float() {
-    wasi_async_runtime::block_on(|reactor| async move {
-        let (address, port) = spawn_app(reactor.clone()).await;
+    wasi_async_runtime::block_on(|_| async move {
+        let (address, port) = spawn_app().await;
 
-        let mut stream = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+        let mut stream = TcpStream::connect(format!("{address}:{port}"))
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
@@ -38,10 +40,10 @@ fn test_invalid_number_float() {
 
 #[test]
 fn test_invalid_number() {
-    wasi_async_runtime::block_on(|reactor| async move {
-        let (address, port) = spawn_app(reactor.clone()).await;
+    wasi_async_runtime::block_on(|_| async move {
+        let (address, port) = spawn_app().await;
 
-        let mut stream = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+        let mut stream = TcpStream::connect(format!("{address}:{port}"))
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
@@ -64,10 +66,10 @@ fn test_invalid_number() {
 
 #[test]
 fn test_ignore_field() {
-    wasi_async_runtime::block_on(|reactor| async move {
-        let (address, port) = spawn_app(reactor.clone()).await;
+    wasi_async_runtime::block_on(|_| async move {
+        let (address, port) = spawn_app().await;
 
-        let mut stream = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+        let mut stream = TcpStream::connect(format!("{address}:{port}"))
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
@@ -91,10 +93,10 @@ fn test_ignore_field() {
 
 #[test]
 fn test_invalid_message() {
-    wasi_async_runtime::block_on(|reactor| async move {
-        let (address, port) = spawn_app(reactor.clone()).await;
+    wasi_async_runtime::block_on(|_| async move {
+        let (address, port) = spawn_app().await;
 
-        let mut stream = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+        let mut stream = TcpStream::connect(format!("{address}:{port}"))
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
@@ -117,10 +119,10 @@ fn test_invalid_message() {
 
 #[test]
 fn test_invalid_json() {
-    wasi_async_runtime::block_on(|reactor| async move {
-        let (address, port) = spawn_app(reactor.clone()).await;
+    wasi_async_runtime::block_on(|_| async move {
+        let (address, port) = spawn_app().await;
 
-        let mut stream = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+        let mut stream = TcpStream::connect(format!("{address}:{port}"))
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
@@ -142,10 +144,10 @@ fn test_invalid_json() {
 #[test]
 
 fn test_is_prime() {
-    wasi_async_runtime::block_on(|reactor| async move {
-        let (address, port) = spawn_app(reactor.clone()).await;
+    wasi_async_runtime::block_on(|_| async move {
+        let (address, port) = spawn_app().await;
 
-        let mut stream = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+        let mut stream = TcpStream::connect(format!("{address}:{port}"))
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
@@ -169,10 +171,10 @@ fn test_is_prime() {
 
 #[test]
 fn test_not_is_prime() {
-    wasi_async_runtime::block_on(|reactor| async move {
-        let (address, port) = spawn_app(reactor.clone()).await;
+    wasi_async_runtime::block_on(|_| async move {
+        let (address, port) = spawn_app().await;
 
-        let mut stream = TcpStream::connect(reactor.clone(), format!("{address}:{port}"))
+        let mut stream = TcpStream::connect(format!("{address}:{port}"))
             .await
             .expect("cannot connect");
         let (read, mut write) = stream.split();
@@ -194,13 +196,13 @@ fn test_not_is_prime() {
     });
 }
 
-async fn spawn_app(reactor: wasi_async_runtime::Reactor) -> (String, u16) {
+async fn spawn_app() -> (String, u16) {
     static INIT_TRACING_SUBSCRIBER: Once = Once::new();
     INIT_TRACING_SUBSCRIBER.call_once(tracing_subscriber::fmt::init);
 
     let address = "127.0.0.1";
 
-    let listener = TcpListener::bind(reactor.clone(), format!("{address}:0"))
+    let listener = TcpListener::bind(format!("{address}:0"))
         .await
         .expect("cannot bind");
     let port = listener
@@ -208,13 +210,14 @@ async fn spawn_app(reactor: wasi_async_runtime::Reactor) -> (String, u16) {
         .expect("cannot get local address")
         .port();
 
-    reactor.spawn(async move {
+    Reactor::spawn_in_current(async move {
         loop {
             let (stream, remote_address) = listener.accept().await.expect("cannot accept");
 
             p01_prime_time::run(remote_address, stream).await.ok();
         }
-    });
+    })
+    .await;
 
     info!("spawned app {address}:{port}");
 

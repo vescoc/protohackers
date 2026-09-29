@@ -34,12 +34,10 @@ fn main() -> Result<(), anyhow::Error> {
 
     info!("start");
 
-    let result = wasi_async_runtime::block_on(|reactor| async move {
-        let listener =
-            TcpListener::bind(reactor.clone(), format!("{}:{}", args.address, args.port)).await?;
+    let result = wasi_async_runtime::block_on(|_| async move {
+        let listener = TcpListener::bind(format!("{}:{}", args.address, args.port)).await?;
 
         run(
-            reactor,
             listener,
             Rc::new(args.chat_address),
             args.chat_port,

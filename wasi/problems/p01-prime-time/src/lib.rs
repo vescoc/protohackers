@@ -7,7 +7,7 @@ use wasi::sockets::network::{self, IpSocketAddress};
 
 use thiserror::Error;
 
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument};
 
 use serde::{Deserialize, Serialize};
 
@@ -68,7 +68,7 @@ pub async fn run(address: IpSocketAddress, mut stream: TcpStream) -> Result<(), 
                     write.write(b"\n").await?;
                 }
                 Err(err) => {
-                    warn!("invalid request: {err}");
+                    info!("invalid request: {err}");
                     write.write_all(err.as_bytes()).await?;
                     write.write(b"\n").await?;
                     break;

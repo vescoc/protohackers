@@ -8,12 +8,23 @@ use std::collections::{HashMap, VecDeque};
 
 use wasi::io::poll::Pollable as WasiPollable;
 
-use tracing::{instrument, trace};
+use tracing::{instrument, trace, warn};
 
 use crate::poller::{EventKey, Poller};
 
 type TaskId = usize;
-type TaskStateInternal = RefCell<bool>;
+
+struct TaskStateInternal {
+    task_id: TaskId,
+    reactor: Reactor,
+}
+
+impl TaskStateInternal {
+    fn new(task_id: TaskId, reactor: Reactor) -> Rc<Self> {
+        Rc::new(Self { task_id, reactor })
+    }
+}
+
 type TaskState = Rc<TaskStateInternal>;
 
 /// Returns the [`Waker`]
@@ -21,7 +32,7 @@ type TaskState = Rc<TaskStateInternal>;
 /// # Note
 ///
 /// Only valid for single thread environment
-fn task_waker(state: TaskState) -> Waker {
+fn task_waker(running: bool, state: TaskState) -> Waker {
     const VTABLE: RawWakerVTable = {
         /// Clone the current data
         ///
@@ -50,9 +61,12 @@ fn task_waker(state: TaskState) -> Waker {
             unsafe {
                 // Recover the original [`Rc`] pointer
                 let state = Rc::from_raw(ptr.cast::<TaskStateInternal>());
-                if let Ok(state) = state.try_borrow_mut().as_mut() {
-                    **state = true;
-                }
+                state
+                    .reactor
+                    .inner
+                    .borrow_mut()
+                    .running
+                    .push_back((false, state.task_id));
             }
         }
 
@@ -67,9 +81,12 @@ fn task_waker(state: TaskState) -> Waker {
             unsafe {
                 let ptr = ptr.cast::<TaskStateInternal>();
                 let state = ptr.as_ref_unchecked();
-                if let Ok(state) = state.try_borrow_mut().as_mut() {
-                    **state = true;
-                }
+                state
+                    .reactor
+                    .inner
+                    .borrow_mut()
+                    .running
+                    .push_back((false, state.task_id));
             }
         }
 
@@ -90,6 +107,11 @@ fn task_waker(state: TaskState) -> Waker {
 
         RawWakerVTable::new(clone, wake, wake_by_ref, drop)
     };
+
+    if running {
+        let mut reactor = state.reactor.inner.borrow_mut();
+        reactor.running.push_back((false, state.task_id));
+    }
 
     let raw = RawWaker::new(Rc::into_raw(state).cast(), &VTABLE);
 
@@ -122,15 +144,23 @@ pub struct Reactor {
     inner: Rc<RefCell<InnerReactor>>,
 }
 
-type TaskInfo = (TaskId, TaskState, Pin<Box<dyn Future<Output = ()>>>);
+type TaskInfo = Pin<Box<dyn Future<Output = ()>>>;
 
 struct InnerReactor {
     next_id: TaskId,
-    main_task_state: TaskState,
     poller: Poller,
-    wakers: HashMap<EventKey, Waker>,
-    tasks: VecDeque<TaskInfo>,
+    running: VecDeque<(bool, TaskId)>,
+    tasks: HashMap<TaskId, TaskInfo>,
     complete: HashMap<TaskId, (bool, Option<Waker>)>,
+    wakers: HashMap<EventKey, Waker>,
+}
+
+impl InnerReactor {
+    fn next_id(&mut self) -> usize {
+        let task_id = self.next_id;
+        self.next_id += 1;
+        task_id
+    }
 }
 
 pub struct WaitFor<'a, P> {
@@ -173,6 +203,7 @@ impl Future for WaitFor<'_, Pollable> {
             this.key = None;
             Poll::Ready(())
         } else {
+            trace!("{key:?} is pending");
             Poll::Pending
         }
     }
@@ -192,20 +223,33 @@ impl<P> Drop for WaitFor<'_, P> {
 
 impl Reactor {
     pub(crate) fn new() -> (Self, Waker) {
-        let main_task_state = Rc::new(RefCell::new(true));
-        (
-            Self {
-                inner: Rc::new(RefCell::new(InnerReactor {
-                    next_id: 0,
-                    main_task_state: main_task_state.clone(),
-                    poller: Poller::new(),
-                    wakers: HashMap::new(),
-                    tasks: VecDeque::new(),
-                    complete: HashMap::new(),
-                })),
-            },
-            task_waker(main_task_state),
-        )
+        let main_task_id = 0;
+        let tasks: HashMap<TaskId, TaskInfo> = HashMap::new();
+
+        let reactor = Self {
+            inner: Rc::new(RefCell::new(InnerReactor {
+                next_id: main_task_id + 1,
+                poller: Poller::new(),
+                running: VecDeque::new(),
+                tasks,
+                complete: HashMap::new(),
+                wakers: HashMap::new(),
+            })),
+        };
+        let main_task_state = TaskStateInternal::new(main_task_id, reactor.clone());
+        (reactor, task_waker(true, main_task_state))
+    }
+
+    pub fn current() -> impl Future<Output = Self> {
+        std::future::poll_fn(|cx| {
+            let data = cx.waker().data().cast::<TaskStateInternal>();
+            // SAFETY: The context is valid, so the data is valid
+            let TaskStateInternal {
+                task_id: _,
+                reactor,
+            } = unsafe { data.as_ref_unchecked() };
+            Poll::Ready(reactor.clone())
+        })
     }
 
     #[instrument(skip_all)]
@@ -215,98 +259,98 @@ impl Reactor {
 
     #[instrument(skip_all)]
     pub(crate) fn block_until(&self) {
-        trace!("block_util tasks len: {}", self.inner.borrow().tasks.len());
-        while self
-            .inner
-            .borrow()
-            .tasks
-            .iter()
-            .any(|(_, state, _)| *state.borrow())
-        {
-            let mut pending = self.inner.borrow().tasks.len();
-            while pending != 0 {
-                let Some((task_id, current_state, mut task)) =
-                    self.inner.borrow_mut().tasks.pop_front()
-                else {
-                    break;
-                };
-                pending -= 1;
+        trace!(
+            "block_util tasks len: {} running: {}",
+            self.inner.borrow().tasks.len(),
+            self.inner.borrow().running.len()
+        );
 
-                if *current_state.borrow() {
-                    // the task is pollable
-                    let state = current_state.clone();
+        for (polled, _) in &mut self.inner.borrow_mut().running {
+            *polled = false;
+        }
 
-                    *state.borrow_mut() = false;
+        let mut complete_wakers = Vec::with_capacity(self.inner.borrow().running.len());
+        while let Some((polled, task_id)) = { self.inner.borrow_mut().running.pop_front() } {
+            trace!("poll task id {task_id} polled: {polled}");
+            if polled {
+                trace!("already polled {task_id}");
+                self.inner.borrow_mut().running.push_back((false, task_id));
+                break;
+            }
 
-                    trace!("poll task id {task_id}");
-                    let waker = task_waker(state.clone());
-                    let mut cx = Context::from_waker(&waker);
+            let Some(mut task) = self.inner.borrow_mut().tasks.remove(&task_id) else {
+                if task_id != 0 {
+                    warn!(
+                        "cannot find task {task_id}, is complete? {}",
+                        complete_wakers
+                            .iter()
+                            .any(|(completed_task_id, _)| task_id == *completed_task_id)
+                    );
+                }
+                continue;
+            };
 
-                    let original_len = self.inner.borrow().tasks.len();
-                    let is_pending = task.as_mut().poll(&mut cx).is_pending();
-                    let current_len = self.inner.borrow().tasks.len();
+            let waker = task_waker(false, TaskStateInternal::new(task_id, self.clone()));
+            let mut cx = Context::from_waker(&waker);
 
-                    pending += current_len - original_len;
-
-                    if is_pending {
-                        self.inner
-                            .borrow_mut()
-                            .tasks
-                            .push_back((task_id, state, task));
-                    } else if let Some((complete, waker)) =
-                        self.inner.borrow_mut().complete.get_mut(&task_id)
-                    {
-                        *complete = true;
-                        if let Some(waker) = waker {
-                            waker.wake_by_ref();
-                        }
-                    }
-                } else {
-                    self.inner
-                        .borrow_mut()
-                        .tasks
-                        .push_back((task_id, current_state, task));
+            if task.as_mut().poll(&mut cx).is_pending() {
+                self.inner.borrow_mut().tasks.insert(task_id, task);
+            } else if let Some((complete, waker)) =
+                self.inner.borrow_mut().complete.get_mut(&task_id)
+            {
+                *complete = true;
+                if let Some(waker) = waker {
+                    complete_wakers.push((task_id, waker.clone()));
                 }
             }
         }
 
-        let mut reactor = self.inner.borrow_mut();
+        for (task_id, waker) in complete_wakers {
+            trace!("wake complete {task_id}");
+            waker.wake();
+        }
 
-        if *reactor.main_task_state.borrow() {
+        let mut reactor = self.inner.borrow_mut();
+        if reactor.tasks.is_empty() {
             trace!("main task ready");
             return;
         }
 
-        for key in reactor.poller.block_until() {
-            trace!("wake key {key:?}");
-            match reactor.wakers.get(&key) {
-                Some(waker) => waker.wake_by_ref(),
-                None => panic!("tried to wake the waker for non-existent `{key:?}`"),
-            }
+        let poller_wakers = reactor
+            .poller
+            .block_until()
+            .iter()
+            .map(|key| (*key, reactor.wakers[key].clone()))
+            .collect::<Vec<_>>();
+        drop(reactor);
+
+        for (key, waker) in poller_wakers {
+            trace!("wake poller {key:?}");
+            waker.wake();
         }
     }
 
-    pub(crate) fn reset_main_task_state(&self) {
-        *self.inner.borrow_mut().main_task_state.borrow_mut() = false;
-    }
-
+    #[instrument(skip_all)]
     pub fn spawn(&self, f: impl Future<Output = ()> + 'static) -> JoinHandle {
         let task_id = {
             // limit borrow mut span
             let mut reactor = self.inner.borrow_mut();
 
-            let task_id = reactor.next_id;
+            let task_id = reactor.next_id();
 
-            reactor.next_id += 1;
-
-            reactor
-                .tasks
-                .push_back((task_id, Rc::new(RefCell::new(true)), Box::pin(f)));
+            reactor.tasks.insert(task_id, Box::pin(f));
+            reactor.running.push_back((false, task_id));
 
             task_id
         };
 
+        trace!("spawned task id {task_id}");
+
         JoinHandle::new(self.clone(), task_id)
+    }
+
+    pub async fn spawn_in_current(f: impl Future<Output = ()> + 'static) -> JoinHandle {
+        Self::current().await.spawn(f)
     }
 }
 
