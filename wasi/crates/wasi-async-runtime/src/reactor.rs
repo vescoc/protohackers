@@ -13,13 +13,15 @@ use tracing::{instrument, trace};
 use crate::poller::{EventKey, Poller};
 
 type TaskId = usize;
+type TaskStateInternal = RefCell<bool>;
+type TaskState = Rc<TaskStateInternal>;
 
 /// Returns the [`Waker`]
 ///
 /// # Note
 ///
 /// Only valid for single thread environment
-pub fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
+fn task_waker(state: TaskState) -> Waker {
     const VTABLE: RawWakerVTable = {
         /// Clone the current data
         ///
@@ -28,7 +30,7 @@ pub fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
         /// Only valid for single thread environment
         unsafe fn clone(ptr: *const ()) -> RawWaker {
             unsafe {
-                let ptr = ptr.cast::<RefCell<bool>>();
+                let ptr = ptr.cast::<TaskStateInternal>();
 
                 // increment the strong counter for the current data
                 Rc::increment_strong_count(ptr);
@@ -47,7 +49,7 @@ pub fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
         unsafe fn wake(ptr: *const ()) {
             unsafe {
                 // Recover the original [`Rc`] pointer
-                let state = Rc::from_raw(ptr.cast::<RefCell<bool>>());
+                let state = Rc::from_raw(ptr.cast::<TaskStateInternal>());
                 if let Ok(state) = state.try_borrow_mut().as_mut() {
                     **state = true;
                 }
@@ -63,7 +65,7 @@ pub fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
         /// Only valid for single thread environment
         unsafe fn wake_by_ref(ptr: *const ()) {
             unsafe {
-                let ptr = ptr.cast::<RefCell<bool>>();
+                let ptr = ptr.cast::<TaskStateInternal>();
                 let state = ptr.as_ref_unchecked();
                 if let Ok(state) = state.try_borrow_mut().as_mut() {
                     **state = true;
@@ -82,7 +84,7 @@ pub fn task_waker(state: Rc<RefCell<bool>>) -> Waker {
             unsafe {
                 // Recover the original [`Rc`] pointer
                 // and let Rust to drop it as normal
-                let _ = Rc::from_raw(ptr.cast::<RefCell<bool>>());
+                let _ = Rc::from_raw(ptr.cast::<TaskStateInternal>());
             }
         }
 
@@ -120,11 +122,11 @@ pub struct Reactor {
     inner: Rc<RefCell<InnerReactor>>,
 }
 
-type TaskInfo = (TaskId, Rc<RefCell<bool>>, Pin<Box<dyn Future<Output = ()>>>);
+type TaskInfo = (TaskId, TaskState, Pin<Box<dyn Future<Output = ()>>>);
 
 struct InnerReactor {
     next_id: TaskId,
-    main_task_state: Rc<RefCell<bool>>,
+    main_task_state: TaskState,
     poller: Poller,
     wakers: HashMap<EventKey, Waker>,
     tasks: VecDeque<TaskInfo>,
