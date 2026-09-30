@@ -77,7 +77,7 @@ where
         debug!("state: joining");
         match self.read.next().await {
             Some(Ok(username)) => {
-                debug!("got username");
+                debug!("got username: {username}");
                 self.server
                     .send(ClientMessage::SetUsername(self.id, username))
                     .await?;

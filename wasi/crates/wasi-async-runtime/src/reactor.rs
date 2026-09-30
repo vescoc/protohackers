@@ -310,12 +310,13 @@ impl Reactor {
             waker.wake();
         }
 
+        trace!(
+            "block_util before poller tasks len: {} running: {}",
+            self.inner.borrow().tasks.len(),
+            self.inner.borrow().running.len()
+        );
+        
         let mut reactor = self.inner.borrow_mut();
-        if reactor.tasks.is_empty() {
-            trace!("main task ready");
-            return;
-        }
-
         let poller_wakers = reactor
             .poller
             .block_until()

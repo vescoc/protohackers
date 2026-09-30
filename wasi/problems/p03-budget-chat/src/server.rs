@@ -55,6 +55,8 @@ pub async fn run(listener: TcpListener) -> Result<(), Error> {
 
     let mut incoming_clients = std::pin::pin!(listener.into_stream().fuse());
 
+    let reactor = Reactor::current().await;
+
     let mut receiver_message = receiver.next().fuse();
     let mut next_client = incoming_clients.next().fuse();
     loop {
@@ -161,13 +163,12 @@ pub async fn run(listener: TcpListener) -> Result<(), Error> {
 
                 let (sender, receiver) = mpsc::unbounded();
 
-                Reactor::spawn_in_current(handle_client(
+                reactor.spawn(handle_client(
                     id,
                     socket,
                     server_sender.clone(),
                     receiver,
-                ))
-                .await;
+                ));
 
                 sender.unbounded_send(ServerMessage::Welcome).ok();
 

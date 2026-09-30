@@ -30,9 +30,11 @@ pub enum Error {
 /// * [`Error`] - errors
 #[instrument(skip_all)]
 pub async fn run(socket: UdpSocket) -> Result<(), Error> {
-    let mut data = HashMap::new();
+    let mut data = HashMap::with_capacity(1024);
 
     loop {
+        debug!("loop data size: {}", data.len());
+        
         let (packet, addr) = socket.recv_from().await?;
 
         let mut iter = packet.iter();
