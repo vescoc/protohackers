@@ -60,7 +60,7 @@ mod tests {
 
     use futures_concurrency::future::Join;
 
-    use crate::block_on;
+    use crate::Reactor;
     use crate::tests::init_tracing_subscriber;
 
     use super::*;
@@ -69,7 +69,7 @@ mod tests {
     fn test_mutex() {
         init_tracing_subscriber();
 
-        block_on(|reactor| async move {
+        Reactor::block_on(|reactor| async move {
             let mutex = Rc::new(Mutex::new(0));
 
             let handle_1 = {

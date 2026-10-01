@@ -1,4 +1,5 @@
 use wasi_async::net::TcpListener;
+use wasi_async_runtime::Reactor;
 
 use tracing::{info, instrument};
 
@@ -21,7 +22,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     let args = Args::parse();
 
-    let result = wasi_async_runtime::block_on(|_| async move {
+    let result = Reactor::block_on(|_| async move {
         let listener = TcpListener::bind(format!("{}:{}", args.address, args.port)).await?;
 
         p03_budget_chat::run(listener).await

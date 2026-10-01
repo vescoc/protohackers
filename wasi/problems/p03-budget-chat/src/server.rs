@@ -163,12 +163,7 @@ pub async fn run(listener: TcpListener) -> Result<(), Error> {
 
                 let (sender, receiver) = mpsc::unbounded();
 
-                reactor.spawn(handle_client(
-                    id,
-                    socket,
-                    server_sender.clone(),
-                    receiver,
-                ));
+                reactor.spawn(handle_client(id, socket, server_sender.clone(), receiver));
 
                 sender.unbounded_send(ServerMessage::Welcome).ok();
 

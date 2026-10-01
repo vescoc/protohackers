@@ -1,7 +1,7 @@
 use clap::Parser;
 
 use wasi_async::net::TcpListener;
-use wasi_async_runtime::block_on;
+use wasi_async_runtime::Reactor;
 
 use tracing::info;
 
@@ -22,7 +22,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     info!("start");
 
-    let result = block_on(|_| async move {
+    let result = Reactor::block_on(|_| async move {
         let listener = TcpListener::bind(format!("{}:{}", args.address, args.port)).await?;
 
         p06_speed_daemon::run(listener).await

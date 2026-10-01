@@ -1,7 +1,7 @@
 use std::sync::Once;
 
 use wasi_async::net::TcpStream;
-use wasi_async_runtime::{Reactor, block_on};
+use wasi_async_runtime::Reactor;
 
 use tracing::info;
 
@@ -10,7 +10,7 @@ use wasi_async::net::TcpListener;
 
 #[test]
 fn test_session() {
-    block_on(async_test_session);
+    Reactor::block_on(async_test_session);
 }
 
 async fn async_test_session(reactor: Reactor) {

@@ -9,14 +9,14 @@ use wasi_async::codec::{FramedRead, FramedWrite};
 use wasi_async::net::{TcpListener, TcpStream};
 use wasi_async::time::timeout;
 
-use wasi_async_runtime::{Reactor, block_on};
+use wasi_async_runtime::Reactor;
 
 use p06_speed_daemon::{run, wire};
 
 #[test]
 #[allow(clippy::too_many_lines)]
 fn test_session() {
-    block_on(|_| async move {
+    Reactor::block_on(|_| async move {
         let (address, port) = spawn_app().await;
 
         {

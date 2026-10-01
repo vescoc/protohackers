@@ -24,7 +24,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     let args = Args::parse();
 
-    let result: Result<_, network::ErrorCode> = wasi_async_runtime::block_on(|_| async move {
+    let result: Result<_, network::ErrorCode> = Reactor::block_on(|_| async move {
         let socket = TcpListener::bind(format!("{}:{}", args.address, args.port)).await?;
 
         loop {

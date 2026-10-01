@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use wasi_async::net::TcpListener;
+use wasi_async_runtime::Reactor;
 
 use clap::Parser;
 
@@ -34,7 +35,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     info!("start");
 
-    let result = wasi_async_runtime::block_on(|_| async move {
+    let result = Reactor::block_on(|_| async move {
         let listener = TcpListener::bind(format!("{}:{}", args.address, args.port)).await?;
 
         run(

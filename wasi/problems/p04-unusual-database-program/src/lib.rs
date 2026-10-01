@@ -34,7 +34,7 @@ pub async fn run(socket: UdpSocket) -> Result<(), Error> {
 
     loop {
         debug!("loop data size: {}", data.len());
-        
+
         let (packet, addr) = socket.recv_from().await?;
 
         let mut iter = packet.iter();

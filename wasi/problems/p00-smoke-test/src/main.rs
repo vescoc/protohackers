@@ -1,7 +1,7 @@
 use wasi::sockets::network::ErrorCode;
 
 use wasi_async::net::TcpListener;
-use wasi_async_runtime::{Reactor, block_on};
+use wasi_async_runtime::Reactor;
 
 use tracing::{debug, info, instrument};
 
@@ -25,7 +25,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     let args = Args::parse();
 
-    let result: Result<_, ErrorCode> = block_on(|_| async move {
+    let result: Result<_, ErrorCode> = Reactor::block_on(|_| async move {
         let socket = TcpListener::bind(format!("{}:{}", args.address, args.port)).await?;
 
         loop {

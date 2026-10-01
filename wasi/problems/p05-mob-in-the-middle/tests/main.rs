@@ -9,7 +9,7 @@ use tracing_futures::Instrument;
 use wasi_async::codec::{FramedRead, LinesDecoder};
 use wasi_async::io::AsyncWriteExt;
 use wasi_async::net::{TcpListener, TcpStream};
-use wasi_async_runtime::{Reactor, block_on};
+use wasi_async_runtime::Reactor;
 
 use p05_mob_in_the_middle::{BOGUSCOIN, run};
 
@@ -17,7 +17,7 @@ use p05_mob_in_the_middle::{BOGUSCOIN, run};
 fn test_session() {
     init_logging();
 
-    block_on(|_| {
+    Reactor::block_on(|_| {
         async move {
             let (chat_address, chat_port) = spawn_budget_chat_app().await;
             let (address, port) = spawn_app(chat_address.clone(), chat_port).await;

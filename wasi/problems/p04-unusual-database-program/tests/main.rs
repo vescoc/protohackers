@@ -7,7 +7,7 @@ use wasi_async_runtime::Reactor;
 
 #[test]
 fn test_session() {
-    wasi_async_runtime::block_on(|_| async move {
+    Reactor::block_on(|_| async move {
         let (address, port) = spawn_app().await;
 
         let socket = UdpSocket::bind("127.0.0.1:0".to_string()).await.unwrap();

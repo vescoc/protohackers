@@ -11,7 +11,7 @@ use tracing::info;
 
 #[test]
 fn test_session() {
-    wasi_async_runtime::block_on(|_| async move {
+    Reactor::block_on(|_| async move {
         let (address, port) = spawn_app().await;
 
         let mut stream = TcpStream::connect(format!("{address}:{port}"))

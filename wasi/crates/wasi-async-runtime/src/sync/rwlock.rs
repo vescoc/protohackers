@@ -144,7 +144,7 @@ mod tests {
     use futures_concurrency::future::Join;
 
     use crate::tests::init_tracing_subscriber;
-    use crate::{block_on, yield_now};
+    use crate::{Reactor, yield_now};
 
     use super::*;
 
@@ -152,7 +152,7 @@ mod tests {
     fn test_read_lock() {
         init_tracing_subscriber();
 
-        block_on(|_| async move {
+        Reactor::block_on(|_| async move {
             let lock = RwLock::new(0);
 
             let read_lock_1 = lock.read().await;
@@ -223,7 +223,7 @@ mod tests {
     fn test_rw_lock_writer_during_active_reader() {
         init_tracing_subscriber();
 
-        block_on(|reactor| async move {
+        Reactor::block_on(|reactor| async move {
             let rw = Rc::new(RwLock::new(0));
 
             // spawn order matters: reactor.tasks is popped LIFO, so pushing
@@ -260,7 +260,7 @@ mod tests {
     fn test_rw_lock_writer_2() {
         init_tracing_subscriber();
 
-        block_on(|reactor| async move {
+        Reactor::block_on(|reactor| async move {
             let rw = Rc::new(RwLock::new(0));
 
             let writer1 = {
@@ -297,7 +297,7 @@ mod tests {
     fn test_rw_lock() {
         init_tracing_subscriber();
 
-        block_on(|reactor| async move {
+        Reactor::block_on(|reactor| async move {
             let rw = Rc::new(RwLock::new(0));
 
             let handle_1 = {

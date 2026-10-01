@@ -16,7 +16,7 @@ use tracing_futures::Instrument;
 fn test_session() {
     init_tracing_subscriber();
 
-    wasi_async_runtime::block_on(|_| {
+    Reactor::block_on(|_| {
         async move {
             let (address, port) = spawn_app().await;
 
@@ -128,7 +128,7 @@ fn test_session() {
 fn test_not_joining() {
     init_tracing_subscriber();
 
-    wasi_async_runtime::block_on(|_| {
+    Reactor::block_on(|_| {
         async move {
             let (address, port) = spawn_app().await;
 

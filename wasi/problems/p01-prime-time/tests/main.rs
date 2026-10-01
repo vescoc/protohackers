@@ -12,7 +12,7 @@ use tracing::info;
 
 #[test]
 fn test_invalid_number_float() {
-    wasi_async_runtime::block_on(|_| async move {
+    Reactor::block_on(|_| async move {
         let (address, port) = spawn_app().await;
 
         let mut stream = TcpStream::connect(format!("{address}:{port}"))
@@ -40,7 +40,7 @@ fn test_invalid_number_float() {
 
 #[test]
 fn test_invalid_number() {
-    wasi_async_runtime::block_on(|_| async move {
+    Reactor::block_on(|_| async move {
         let (address, port) = spawn_app().await;
 
         let mut stream = TcpStream::connect(format!("{address}:{port}"))
@@ -66,7 +66,7 @@ fn test_invalid_number() {
 
 #[test]
 fn test_ignore_field() {
-    wasi_async_runtime::block_on(|_| async move {
+    Reactor::block_on(|_| async move {
         let (address, port) = spawn_app().await;
 
         let mut stream = TcpStream::connect(format!("{address}:{port}"))
@@ -93,7 +93,7 @@ fn test_ignore_field() {
 
 #[test]
 fn test_invalid_message() {
-    wasi_async_runtime::block_on(|_| async move {
+    Reactor::block_on(|_| async move {
         let (address, port) = spawn_app().await;
 
         let mut stream = TcpStream::connect(format!("{address}:{port}"))
@@ -119,7 +119,7 @@ fn test_invalid_message() {
 
 #[test]
 fn test_invalid_json() {
-    wasi_async_runtime::block_on(|_| async move {
+    Reactor::block_on(|_| async move {
         let (address, port) = spawn_app().await;
 
         let mut stream = TcpStream::connect(format!("{address}:{port}"))
@@ -144,7 +144,7 @@ fn test_invalid_json() {
 #[test]
 
 fn test_is_prime() {
-    wasi_async_runtime::block_on(|_| async move {
+    Reactor::block_on(|_| async move {
         let (address, port) = spawn_app().await;
 
         let mut stream = TcpStream::connect(format!("{address}:{port}"))
@@ -171,7 +171,7 @@ fn test_is_prime() {
 
 #[test]
 fn test_not_is_prime() {
-    wasi_async_runtime::block_on(|_| async move {
+    Reactor::block_on(|_| async move {
         let (address, port) = spawn_app().await;
 
         let mut stream = TcpStream::connect(format!("{address}:{port}"))

@@ -8,7 +8,7 @@ use futures::{
     FutureExt, Sink, SinkExt, Stream, StreamExt, TryStreamExt, channel::mpsc, stream::FusedStream,
 };
 
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, info, instrument};
 
 use wasi::io::streams::StreamError;
 
@@ -85,16 +85,22 @@ where
             _ => return Ok(None),
         }
 
+        debug!("joining finalize");
         match self.client.next().await {
             Some(ServerMessage::UsernameAccepted) => {
+                debug!("joining accepted");
                 self.server.send(ClientMessage::Joined(self.id)).await?;
                 Ok(Some(self.into()))
             }
             Some(ServerMessage::UsernameInvalid) => {
+                debug!("joining invalid");
                 self.write.send("Invalid username".to_string()).await?;
                 Err(Error::InvalidUsername)
             }
-            None => Ok(None),
+            None => {
+                debug!("joining done");
+                Ok(None)
+            }
             message => unreachable!("invalid server message {:?}", message),
         }
     }
@@ -229,7 +235,7 @@ pub(crate) async fn handle_client(
             return;
         }
         Err(err) => {
-            error!("error {:?}", err);
+            info!("error {:?}", err);
             server.unbounded_send(ClientMessage::Disconnect(id)).ok();
             return;
         }
@@ -242,7 +248,7 @@ pub(crate) async fn handle_client(
             return;
         }
         Err(err) => {
-            error!("error {:?}", err);
+            info!("error {:?}", err);
             server.unbounded_send(ClientMessage::Disconnect(id)).ok();
             return;
         }
@@ -255,14 +261,14 @@ pub(crate) async fn handle_client(
             return;
         }
         Err(err) => {
-            error!("error {:?}", err);
+            info!("error {:?}", err);
             server.unbounded_send(ClientMessage::Disconnect(id)).ok();
             return;
         }
     };
 
     if let Err(err) = client.chatting().await {
-        error!("error {:?}", err);
+        info!("error {:?}", err);
         server.unbounded_send(ClientMessage::Disconnect(id)).ok();
     } else {
         debug!("state: done");
