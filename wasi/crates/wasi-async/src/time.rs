@@ -3,21 +3,22 @@ use std::future::Future;
 use std::ops;
 use std::time::Duration;
 
-use futures::FutureExt;
-use futures_concurrency::prelude::*;
-
 use tracing::{instrument, trace};
 
 use wasi::clocks::monotonic_clock;
 
 use wasi_async_runtime::Reactor;
 
-#[derive(Debug, PartialEq)]
-pub struct Elapsed;
+#[derive(thiserror::Error)]
+pub struct Elapsed<F>(pub F);
 
-impl std::error::Error for Elapsed {}
+impl<F> fmt::Display for Elapsed<F> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(fmt, "Elapsed")
+    }
+}
 
-impl fmt::Display for Elapsed {
+impl<F> fmt::Debug for Elapsed<F> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(fmt, "Elapsed")
     }
@@ -26,17 +27,20 @@ impl fmt::Display for Elapsed {
 /// # Errors
 /// # Panics
 #[instrument(skip_all)]
-#[allow(clippy::cast_possible_truncation)]
-pub async fn timeout<F: Future>(duration: Duration, future: F) -> Result<F::Output, Elapsed> {
+#[allow(clippy::cast_possible_truncation, clippy::let_and_return)]
+pub async fn timeout<F: Future + Unpin>(duration: Duration, future: F) -> Result<F::Output, Elapsed<F>> {
     let reactor = Reactor::current().await;
 
     let subscription = monotonic_clock::subscribe_duration(duration.as_nanos() as u64);
     trace!("subscribe duration {subscription:?}");
-    let wait_for = reactor.wait_for(subscription).map(|()| Err(Elapsed));
+    let wait_for = reactor.wait_for(subscription);
 
-    let future = future.map(Ok);
+    let result = match futures::future::select(future, wait_for).await {
+        futures::future::Either::Left((result, _)) => Ok(result),
+        futures::future::Either::Right(((), future)) => Err(Elapsed(future)),
+    };
 
-    (wait_for, future).race().await
+    result
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -47,6 +51,12 @@ impl Instant {
     #[must_use]
     pub fn now() -> Self {
         Self(monotonic_clock::now())
+    }
+
+    #[must_use]
+    #[expect(clippy::unchecked_time_subtraction, reason = "I use monotonic clock")]
+    pub fn elapsed(&self) -> Duration {
+        Duration::from_nanos(monotonic_clock::now()) - Duration::from_nanos(self.0)
     }
 }
 

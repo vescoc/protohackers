@@ -156,7 +156,7 @@ fn test_not_joining() {
             stream_bob.close().await.unwrap();
 
             match time::timeout(Duration::from_millis(100), read_alice.next()).await {
-                Err(time::Elapsed) => info!("elapsed"),
+                Err(time::Elapsed(_)) => info!("elapsed"),
                 Ok(Some(Ok(message))) => panic!("invalid: {:?}", std::str::from_utf8(&message)),
                 Ok(payload) => panic!("invalid: {payload:?}"),
             }

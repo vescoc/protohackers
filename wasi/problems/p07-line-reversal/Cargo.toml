@@ -1,0 +1,29 @@
+[package]
+name = "p07-line-reversal"
+version = "0.1.0"
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+futures.workspace = true
+futures-concurrency.workspace = true
+wit-bindgen-rt.workspace = true
+wasi.workspace = true
+wasi-async-runtime.workspace = true
+wasi-async.workspace = true
+thiserror.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+bytes.workspace = true
+
+[package.metadata.component]
+package = "component:p07-line-reversal"
+
+[package.metadata.component.dependencies]
+
+[lints]
+workspace = true
