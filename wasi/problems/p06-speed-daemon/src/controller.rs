@@ -129,7 +129,7 @@ mod tests {
             plate: "UN1X".to_string(),
             timestamp: 0,
         });
-        assert!(tickets.is_empty());
+        assert_eq!(tickets, []);
 
         let mut tickets = controller.signal(Plate {
             road: 123,
@@ -188,7 +188,7 @@ mod tests {
             plate: "UN1X".to_string(),
             timestamp: 45,
         });
-        assert!(tickets.is_empty());
+        assert_eq!(tickets, []);
 
         let _ = controller.signal(Plate {
             road: 321,
