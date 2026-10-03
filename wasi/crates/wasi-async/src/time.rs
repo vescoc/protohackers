@@ -43,6 +43,15 @@ pub async fn timeout<F: Future + Unpin>(duration: Duration, future: F) -> Result
     result
 }
 
+/// Yield and wake after `duration`
+#[allow(clippy::cast_possible_truncation)]
+pub async fn sleep(duration: Duration) {
+    let reactor = Reactor::current().await;
+
+    let subscription = monotonic_clock::subscribe_duration(duration.as_nanos() as u64);
+    reactor.wait_for(subscription).await;
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Instant(u64);
