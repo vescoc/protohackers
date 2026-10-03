@@ -37,6 +37,18 @@ impl Notify {
         this.notified = true;
     }
 
+    pub fn notify_waiters(&self) {
+        // single thread
+        let mut this = self.inner.borrow_mut();
+        if !this.notified {
+            while let Some(waker) = this.queue.pop_front() {
+                waker.wake();
+            }
+        }
+
+        this.notified = true;
+    }
+
     pub fn notified(&self) -> impl Future<Output = ()> + '_ {
         future::poll_fn(move |cx| {
             let mut this = self.inner.borrow_mut();
