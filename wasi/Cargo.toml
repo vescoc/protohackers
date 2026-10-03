@@ -11,6 +11,7 @@ members = [
     "problems/p05-mob-in-the-middle",
     "problems/p06-speed-daemon",
     "problems/p07-line-reversal",
+    "problems/p08-insecure-sockets-layer",
 ]
 resolver = "2"
 
