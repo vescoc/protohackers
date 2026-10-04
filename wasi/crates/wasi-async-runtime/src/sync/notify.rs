@@ -90,7 +90,8 @@ mod tests {
                     assert!(!*value.borrow());
                     lock.notified().await;
                     *value.borrow_mut() = true;
-                }).await
+                })
+                .await
             };
 
             yield_now().await;
@@ -99,7 +100,7 @@ mod tests {
             lock.notify_one();
             handle.await;
 
-            assert!(*value.borrow());            
+            assert!(*value.borrow());
         });
     }
 
@@ -117,7 +118,8 @@ mod tests {
                     assert_eq!(*value.borrow(), 0);
                     lock.notified().await;
                     *value.borrow_mut() += 100;
-                }).await
+                })
+                .await
             };
             let handle2 = {
                 let value = Rc::clone(&value);
@@ -126,7 +128,8 @@ mod tests {
                     assert_eq!(*value.borrow(), 0);
                     lock.notified().await;
                     *value.borrow_mut() += 100;
-                }).await
+                })
+                .await
             };
 
             yield_now().await;
@@ -136,7 +139,10 @@ mod tests {
             handle1.await;
             handle2.await;
 
-            assert_eq!(*value.borrow(), 200);            
+            assert_eq!(*value.borrow(), 200);
+
+            assert_eq!(lock.inner.borrow().notified, 0);
+            assert!(lock.inner.borrow().queue.is_empty());
         });
     }
 }

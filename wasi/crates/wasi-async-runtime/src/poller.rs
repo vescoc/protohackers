@@ -47,7 +47,7 @@ impl Poller {
 
         for (index, target) in &self.targets {
             match target {
-                Pollable::Wasi(pollable) => {
+                Pollable::Wasi(_, pollable) => {
                     indexes.push(index);
                     targets.push(pollable);
                 }
@@ -63,11 +63,18 @@ impl Poller {
         } else {
             poll(&targets)
         };
-        trace!("done poll ready indexes {ready_indexes:?}");
 
         ready_indexes
             .into_iter()
-            .map(|index| EventKey(indexes[index as usize] as u32))
+            .map(|index| {
+                let index = indexes[index as usize];
+                match &mut self.targets[index] {
+                    Pollable::Wasi(error, pollable) => {
+                        *error = !pollable.ready();
+                    }
+                }
+                EventKey(index as u32)
+            })
             .collect()
     }
 }

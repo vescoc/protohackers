@@ -122,20 +122,20 @@ fn task_waker(running: bool, state: TaskState) -> Waker {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Pollable {
-    Wasi(WasiPollable),
+    Wasi(bool, WasiPollable),
 }
 
 impl Pollable {
     pub fn ready(&self) -> bool {
         match self {
-            Pollable::Wasi(pollable) => pollable.ready(),
+            Pollable::Wasi(error, pollable) => *error || pollable.ready(),
         }
     }
 }
 
 impl From<WasiPollable> for Pollable {
     fn from(pollable: WasiPollable) -> Self {
-        Self::Wasi(pollable)
+        Self::Wasi(false, pollable)
     }
 }
 
@@ -363,7 +363,7 @@ impl Reactor {
     #[instrument(skip_all)]
     pub fn spawn<F>(&self, f: F) -> JoinHandle<F::Output>
     where
-        F: Future + 'static
+        F: Future + 'static,
     {
         let result = Rc::new(RefCell::new(None));
         let task_id = {
@@ -372,7 +372,7 @@ impl Reactor {
             let task = async move {
                 *result.borrow_mut() = Some(f.await);
             };
-            
+
             let mut reactor = self.inner.borrow_mut();
 
             let task_id = reactor.next_id();
@@ -390,7 +390,7 @@ impl Reactor {
 
     pub async fn spawn_in_current<F>(f: F) -> JoinHandle<F::Output>
     where
-        F: Future + 'static
+        F: Future + 'static,
     {
         Self::current().await.spawn(f)
     }
@@ -410,7 +410,11 @@ impl<T> JoinHandle<T> {
             .complete
             .insert(task_id, (false, None));
 
-        Self { reactor, task_id, result }
+        Self {
+            reactor,
+            task_id,
+            result,
+        }
     }
 }
 

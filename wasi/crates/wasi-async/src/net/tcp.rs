@@ -36,6 +36,8 @@ impl TcpListener {
 
         let socket = create_tcp_socket(family)?;
 
+        socket.set_listen_backlog_size(1024 * 4)?;
+
         socket.start_bind(&network, socket_address)?;
         loop {
             match socket.finish_bind() {

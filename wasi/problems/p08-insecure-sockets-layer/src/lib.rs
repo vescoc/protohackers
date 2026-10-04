@@ -243,33 +243,29 @@ impl TryFrom<&[u8]> for Cipher {
         while let Some(value) = cursor.next() {
             match value {
                 0x01 => operations.push(Operation::Reversebits),
-                0x02 => operations.push(Operation::Xor(
-                    if CIPHER_IGNORE_INVALID_N {
-                        cursor.next().copied().ok_or(CipherError::EOF)?
-                    } else {
-                        cursor.next().ok_or(CipherError::EOF).and_then(|n| {
-                            if *n == 0 {
-                                Err(CipherError::InvalidN)
-                            } else {
-                                Ok(*n)
-                            }
-                        })?
-                    }
-                )),
+                0x02 => operations.push(Operation::Xor(if CIPHER_IGNORE_INVALID_N {
+                    cursor.next().copied().ok_or(CipherError::EOF)?
+                } else {
+                    cursor.next().ok_or(CipherError::EOF).and_then(|n| {
+                        if *n == 0 {
+                            Err(CipherError::InvalidN)
+                        } else {
+                            Ok(*n)
+                        }
+                    })?
+                })),
                 0x03 => operations.push(Operation::Xorpos),
-                0x04 => operations.push(Operation::Add(
-                    if CIPHER_IGNORE_INVALID_N {
-                        cursor.next().copied().ok_or(CipherError::EOF)?
-                    } else {
-                        cursor.next().ok_or(CipherError::EOF).and_then(|n| {
-                            if *n == 0 {
-                                Err(CipherError::InvalidN)
-                            } else {
-                                Ok(*n)
-                            }
-                        })?
-                    }
-                )),
+                0x04 => operations.push(Operation::Add(if CIPHER_IGNORE_INVALID_N {
+                    cursor.next().copied().ok_or(CipherError::EOF)?
+                } else {
+                    cursor.next().ok_or(CipherError::EOF).and_then(|n| {
+                        if *n == 0 {
+                            Err(CipherError::InvalidN)
+                        } else {
+                            Ok(*n)
+                        }
+                    })?
+                })),
                 0x05 => operations.push(Operation::Addpos),
                 _ => return Err(CipherError::InvalidSpec(*value)),
             }

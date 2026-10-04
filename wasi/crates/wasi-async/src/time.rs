@@ -28,7 +28,10 @@ impl<F> fmt::Debug for Elapsed<F> {
 /// # Panics
 #[instrument(skip_all)]
 #[allow(clippy::cast_possible_truncation, clippy::let_and_return)]
-pub async fn timeout<F: Future + Unpin>(duration: Duration, future: F) -> Result<F::Output, Elapsed<F>> {
+pub async fn timeout<F: Future + Unpin>(
+    duration: Duration,
+    future: F,
+) -> Result<F::Output, Elapsed<F>> {
     let reactor = Reactor::current().await;
 
     let subscription = monotonic_clock::subscribe_duration(duration.as_nanos() as u64);

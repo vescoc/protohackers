@@ -12,6 +12,7 @@ members = [
     "problems/p06-speed-daemon",
     "problems/p07-line-reversal",
     "problems/p08-insecure-sockets-layer",
+    "problems/p09-job-centre",
 ]
 resolver = "2"
 
