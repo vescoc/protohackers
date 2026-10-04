@@ -15,6 +15,8 @@ use tracing::{debug, info, instrument};
 
 const BUFFER_SIZE: usize = 5000;
 
+const CIPHER_IGNORE_INVALID_N: bool = true;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("stream error: {0}")]
@@ -242,23 +244,31 @@ impl TryFrom<&[u8]> for Cipher {
             match value {
                 0x01 => operations.push(Operation::Reversebits),
                 0x02 => operations.push(Operation::Xor(
-                    cursor.next().ok_or(CipherError::EOF).and_then(|n| {
-                        if *n == 0 {
-                            Err(CipherError::InvalidN)
-                        } else {
-                            Ok(*n)
-                        }
-                    })?,
+                    if CIPHER_IGNORE_INVALID_N {
+                        cursor.next().copied().ok_or(CipherError::EOF)?
+                    } else {
+                        cursor.next().ok_or(CipherError::EOF).and_then(|n| {
+                            if *n == 0 {
+                                Err(CipherError::InvalidN)
+                            } else {
+                                Ok(*n)
+                            }
+                        })?
+                    }
                 )),
                 0x03 => operations.push(Operation::Xorpos),
                 0x04 => operations.push(Operation::Add(
-                    cursor.next().ok_or(CipherError::EOF).and_then(|n| {
-                        if *n == 0 {
-                            Err(CipherError::InvalidN)
-                        } else {
-                            Ok(*n)
-                        }
-                    })?,
+                    if CIPHER_IGNORE_INVALID_N {
+                        cursor.next().copied().ok_or(CipherError::EOF)?
+                    } else {
+                        cursor.next().ok_or(CipherError::EOF).and_then(|n| {
+                            if *n == 0 {
+                                Err(CipherError::InvalidN)
+                            } else {
+                                Ok(*n)
+                            }
+                        })?
+                    }
                 )),
                 0x05 => operations.push(Operation::Addpos),
                 _ => return Err(CipherError::InvalidSpec(*value)),
