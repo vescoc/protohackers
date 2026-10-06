@@ -1,5 +1,6 @@
 use std::cell::UnsafeCell;
 use std::ops::{Deref, DerefMut};
+use std::ptr;
 
 use tracing::{instrument, trace};
 
@@ -34,12 +35,10 @@ impl<T> RwLock<T> {
             self.notify_writers.notified().await;
         }
 
-        debug_assert_eq!(unsafe { *self.readers.get() }, 0);
-
         trace!("ok");
         RwLockWriteGuard {
-            _permit: permit,
-            value: &self.value,
+            permit,
+            value: self.value.get(),
         }
     }
 
@@ -57,8 +56,8 @@ impl<T> RwLock<T> {
 
         trace!("ok");
         Some(RwLockWriteGuard {
-            _permit: permit,
-            value: &self.value,
+            permit,
+            value: self.value.get(),
         })
     }
 
@@ -71,9 +70,11 @@ impl<T> RwLock<T> {
         *readers += 1;
 
         RwLockReadGuard {
-            value: &self.value,
-            notify_writers: &self.notify_writers,
-            readers: &self.readers,
+            drop: RwLockReadGuardDrop {
+                notify_writers: &self.notify_writers,
+                readers: &self.readers,
+            },
+            value: self.value.get(),
         }
     }
 
@@ -86,49 +87,80 @@ impl<T> RwLock<T> {
         *readers += 1;
 
         Some(RwLockReadGuard {
-            value: &self.value,
-            notify_writers: &self.notify_writers,
-            readers: &self.readers,
+            drop: RwLockReadGuardDrop {
+                notify_writers: &self.notify_writers,
+                readers: &self.readers,
+            },
+            value: self.value.get(),
         })
     }
 }
 
 #[derive(Debug)]
 pub struct RwLockWriteGuard<'a, T> {
-    _permit: SemaphorePermit<'a>,
-    value: &'a UnsafeCell<T>,
+    permit: SemaphorePermit<'a>,
+    value: *mut T,
+}
+
+impl<'a, T> RwLockWriteGuard<'a, T> {
+    pub fn map<F, U>(RwLockWriteGuard { permit, value }: RwLockWriteGuard<'a, T>, f: F) -> RwLockWriteGuard<'a, U>
+    where
+        F: FnOnce(&mut T) -> &mut U
+    {
+        RwLockWriteGuard {
+            permit,
+            value: ptr::from_mut(f(unsafe { &mut *value })),
+        }
+    }
 }
 
 impl<T> Deref for RwLockWriteGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.value.get() }
+        unsafe { &*self.value }
     }
 }
 
 impl<T> DerefMut for RwLockWriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.value.get() }
+        unsafe { &mut *self.value }
     }
 }
 
 #[derive(Debug)]
 pub struct RwLockReadGuard<'a, T> {
-    value: &'a UnsafeCell<T>,
-    notify_writers: &'a Notify,
-    readers: &'a UnsafeCell<usize>,
+    drop: RwLockReadGuardDrop<'a>,
+    value: *mut T,
+}
+
+impl<'a, T> RwLockReadGuard<'a, T> {
+    pub fn map<F, U>(RwLockReadGuard { drop, value}: RwLockReadGuard<'a, T>, f: F) -> RwLockReadGuard<'a, U>
+    where
+        F: FnOnce(&T) -> &U
+    {
+        RwLockReadGuard {
+            drop,
+            value: ptr::from_ref(f(unsafe { &*value })).cast_mut(),
+        }
+    }
 }
 
 impl<T> Deref for RwLockReadGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.value.get() }
+        unsafe { &*self.value }
     }
 }
 
-impl<T> Drop for RwLockReadGuard<'_, T> {
+#[derive(Debug)]
+struct RwLockReadGuardDrop<'a> {
+    notify_writers: &'a Notify,
+    readers: &'a UnsafeCell<usize>,
+}
+
+impl Drop for RwLockReadGuardDrop<'_> {
     fn drop(&mut self) {
         *(unsafe { &mut *self.readers.get() }) -= 1;
         if unsafe { *self.readers.get() } == 0 {
@@ -301,7 +333,7 @@ mod tests {
             let rw = Rc::new(RwLock::new(0));
 
             let handle_1 = {
-                let rw = rw.clone();
+                let rw = Rc::clone(&rw);
                 reactor.spawn(async move {
                     let value = &*rw.read().await;
 
@@ -312,7 +344,7 @@ mod tests {
             };
 
             let handle_2 = {
-                let rw = rw.clone();
+                let rw = Rc::clone(&rw);
                 reactor.spawn(async move {
                     let value = &*rw.read().await;
 
@@ -323,7 +355,7 @@ mod tests {
             };
 
             let handle_3 = {
-                let rw = rw.clone();
+                let rw = Rc::clone(&rw);
                 reactor.spawn(async move {
                     let value = &mut *rw.write().await;
 
@@ -334,7 +366,7 @@ mod tests {
             };
 
             let handle_5 = {
-                let rw = rw.clone();
+                let rw = Rc::clone(&rw);
                 reactor.spawn(async move {
                     let value = &mut *rw.write().await;
 
@@ -345,7 +377,7 @@ mod tests {
             };
 
             let handle_4 = {
-                let rw = rw.clone();
+                let rw = Rc::clone(&rw);
                 reactor.spawn(async move {
                     let value = &*rw.read().await;
 

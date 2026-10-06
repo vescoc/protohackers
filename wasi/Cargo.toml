@@ -13,6 +13,7 @@ members = [
     "problems/p07-line-reversal",
     "problems/p08-insecure-sockets-layer",
     "problems/p09-job-centre",
+    "problems/p10-voracious-code-storage",
 ]
 resolver = "2"
 
