@@ -45,4 +45,4 @@ The server listen by default on port `10000` for any incoming address.
 9. `p08-insecure-sockets-layer` [08 - Insecure Sockets Layer](https://protohackers.com/problem/8), implementation in [Rust](rust/p08-insecure-sockets-layer) and [Rust/WASI](wasi/problems/p08-insecure-sockets-layer)
 10. `p09-job-centre` [09 Job Centre](https://protohackers.com/problem/9), implementation in [Rust](rust/p09-job-centre) and [Rust/WASI](wasi/problems/p09-job-centre)
 11. `p10-voracious-code-storage` [10 - Voracious Code Storage](https://protohackers.com/problem/10), implementation in [Rust](rust/p10-voracious-code-storage) and [Rust/WASI](wasi/problems/p10-voracious-code-storage)
-12. `p11-pest-control` [11 Pest Control](https://protohackers.com/problem/11), implementation in [Rust](rust/p11-pest-control)
+12. `p11-pest-control` [11 Pest Control](https://protohackers.com/problem/11), implementation in [Rust](rust/p11-pest-control) and [Rust/WASI](wasi/problems/p11-pest-control)

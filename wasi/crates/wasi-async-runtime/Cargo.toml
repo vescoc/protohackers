@@ -15,6 +15,7 @@ wit-bindgen-rt.workspace = true
 wasi.workspace = true
 slab.workspace = true
 tracing.workspace = true
+futures.workspace = true
 
 [dev-dependencies]
 futures-concurrency.workspace = true
